@@ -90,6 +90,12 @@ class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSu
     validate(df, people.groupBy("id", "address.street").count())
   }
 
+  it should "order columns on a dataset" in {
+    val people = peopleData.toDS()
+    val ds     = people.orderByFrom(_.id, _.address.street)
+    validate(ds, people.orderBy("id", "address.street"))
+  }
+
   it should "rollup columns on a dataset" in {
     val people = peopleData.toDS()
     val df     = people.rollupFrom(_.id, _.address.street).count()
@@ -100,12 +106,6 @@ class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSu
     val people = peopleData.toDS()
     val df     = people.selectFrom(_.id, _.address.street)
     validate(df, people.select(people("id"), people("address.street")))
-  }
-
-  it should "order columns on a dataset" in {
-    val people = peopleData.toDS()
-    val ds     = people.orderByFrom(_.id, _.address.street)
-    validate(ds, people.orderBy("id", "address.street"))
   }
 
   it should "sort columns on a dataset" in {

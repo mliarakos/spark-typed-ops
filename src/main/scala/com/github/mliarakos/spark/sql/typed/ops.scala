@@ -50,7 +50,7 @@ object ops {
     def withColumnRenamedFrom(existingName: A => Any, newName: String): DataFrame =
       macro TypedOpsImpl.datasetWithColumnRenamed
 
-    def orderByFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetSort[A]
+    def orderByFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetOrderBy[A]
 
     def selectFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetSelect
 

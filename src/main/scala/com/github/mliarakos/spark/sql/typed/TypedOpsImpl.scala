@@ -52,8 +52,6 @@ private[typed] object TypedOpsImpl {
     val columns = cols.map(getColumn(c)(_, Some(dataset)))
     val seq     = q"Seq(..$columns)"
 
-    println(showCode(seq))
-
     c.Expr[Seq[Column]](seq)
   }
 
@@ -75,6 +73,10 @@ private[typed] object TypedOpsImpl {
 
   def datasetGroupBy(c: blackbox.Context)(cols: c.Expr[Any]*): c.Expr[RelationalGroupedDataset] = {
     datasetMethod[RelationalGroupedDataset](c)("groupBy")(cols: _*)
+  }
+
+  def datasetOrderBy[A](c: blackbox.Context)(cols: c.Expr[Any]*): c.Expr[Dataset[A]] = {
+    datasetMethod[Dataset[A]](c)("orderBy")(cols: _*)
   }
 
   def datasetRollup(c: blackbox.Context)(cols: c.Expr[Any]*): c.Expr[RelationalGroupedDataset] = {

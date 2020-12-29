@@ -13,13 +13,19 @@ colFrom[User](_.id)
 // compiles to:
 col("id")
 
-val ds: Dataset[User] = ...
+val ds: Dataset[User] = ???
+
+// get a column
+ds.col(_.id)
+
+// compiles to:
+ds.col("id")
 
 // select columns
 ds.selectFrom(_.id, _.name)
 
 // compiles to:
-ds.select(ds("id"), ds("name"))
+ds.select(ds.col("id"), ds.col("name"))
 ```
 
 Dataset columns are specified in a type-safe manner, so errors (e.g. misspelled or non-existent columns) are caught by the compiler. The operations are then converted to equivalent untyped DataFrame operations for improved runtime performance. In addition, the simple approach to specifying columns is easily supported by IDEs for autocompletion and refactoring.  
@@ -48,8 +54,7 @@ Consider the example of selecting columns from a Dataset as DataFrame:
 
 ```scala
 case class User(id: Int, name: String, email: String)
-
-val ds: Dataset[User] = ...
+val ds: Dataset[User] = ???
 
 // maintain type-safety, incur object overhead
 val df1 = ds.map(user => (user.id, user.name))
@@ -76,3 +81,96 @@ LocalTableScan <empty>, [id#3, email#5]
 ```
 
 Spark Typed Ops provides Dataset extensions to get both benefits. It uses Scala macros to convert type-safe Dataset operations to efficient DataFrame operations at compile time. The added type-safety helps prevents errors (e.g. misspelled or non-existent columns) without sacrificing performance. It also operates only at compile time using only the existing Spark API so there's no runtime impact.
+
+## Usage
+
+Use Spark Type Ops by importing:
+
+```scala
+import com.github.mliarakos.spark.sql.typed.ops._
+```
+
+This provides type-safe versions of several Spark SQL functions for working with columns:
+
+```scala
+case class User(id: Int, name: String, email: String)
+
+// names
+nameFrom[User](_.id)          // "id"
+namesFrom[User](_.id, _.name) // Seq("id", "name")
+
+// columns
+$[User](_.id)                // col("id")
+colFrom[User](_.id)          // col("id")
+colsFrom[User](_.id, _.name) // Seq(col("id"), col("name"))
+
+// typed columns
+typedColFrom[User](_.id)   // col("id").as[Int]
+typedColFrom[User](_.name) // col("name").as[String]
+```
+
+It also provides type-safe Dataset extensions for many common methods:
+
+```scala
+val ds: Dataset[User] = ???
+
+// names
+ds.nameFrom(_.id)          // "id"
+ds.namesFrom(_.id, _.name) // Seq("id", "name")
+
+// columns
+ds.colFrom(_.id)          // ds.col("id")
+ds.colsFrom(_.id, _.name) // Seq(ds.col("id"), ds.col("name"))
+
+// select
+ds.selectFrom(_.id, _.name)      // ds.select(ds.col("id"), ds.col("name"))
+ds.selectFromTyped(_.id, _.name) // ds.select(ds.col("id").as[Int], ds.col("name").as[String])
+
+// other methods
+ds.cubeFrom(_.id, _.name)                  // ds.cube("id", "name")
+ds.describeFrom(_.id, _.name)              // ds.describe("id", "name")
+ds.dropFrom(_.id, _.name)                  // ds.drop("id", "name")
+ds.dropDuplicatesFrom(_.id, _.name)        // ds.dropDuplicates("id", "name")
+ds.groupByFrom(_.id, _.name)               // ds.groupBy("id", "name")
+ds.orderByFrom(_.id, _.name)               // ds.orderBy("id", "name")
+ds.rollupFrom(_.id, _.name)                // ds.rollup("id", "name")
+ds.sortFrom(_.id, _.name)                  // ds.sort("id", "name")
+ds.sortWithinPartitionsFrom(_.id, _.name)  // ds.sortWithinPartitions("id", "name")
+ds.withColumnRenamedFrom(_.id, "recordId") // ds.withColumnRenamed("id", "recordId")
+```
+
+Nested columns are supported:
+
+```scala
+case class Address(street: String, city: String)
+case class User(id: Int, name: String, address: Address)
+val ds: Dataset[User] = ???
+
+colFrom[User](_.address.street) // col("address.street")
+ds.colFrom(_.address.street)    // ds.col("address.street")
+ds.selectFrom(_.address.street) // ds.select(ds.col("address.street"))
+```
+
+These functions and methods are useful in specifying column expressions and conditions:
+
+```scala
+// User with posts
+case class User(id: Int, name: String, email: String)
+case class Post(id: Int, userId: Int, post: String)
+
+val users: Dataset[User] = ???
+val posts: Dataset[Post] = ???
+
+// where conditions
+posts.where(length(colFrom[Post](_.post)) > 10) // posts.where(length(col("post")) > 10)
+users.where(users.colFrom(_.name).like("a%"))   // users.where(users.col("name").like("a%"))
+
+// sort condition
+posts.sort(length(colFrom[Post](_.post)).desc) // posts.sort(length(col("post")).desc)
+
+// join condition
+users.join(posts, users.colFrom(_.id) === posts.colFrom(_.userId)) // users.join(posts, users.col("id") === posts.col("userId"))
+
+// new column expression
+posts.withColumn("preview", substring(posts.colFrom(_.post), 0, 10)) // posts.withColumn("preview", substring(posts.col("post"), 0, 10))
+```
