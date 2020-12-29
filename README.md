@@ -197,13 +197,13 @@ users.orderBy(nameFrom[Post](_.userId))
 users.orderBy(colFrom[Post](_.userId))
 
 // will fail at runtime
-// although id is a valid posts column and is also a present in the users dataset, the column references the posts
-// dataset and is not actually available on the users dataset
+// although id is a valid posts column and is also a present in the users dataset, the column references
+// the posts dataset and is not actually available on the users dataset
 users.orderBy(posts.colFrom(_.id))
 
 // will succeed at runtime, but is fragile to refactoring
-// id is a valid Post column and is also present in the users dataset, but the operation succeeds only because the 
-// column is specified by name and the names coincidentally match
+// id is a valid Post column and is also present in the users dataset, but the operation succeeds only 
+// because the column is specified by name and the names coincidentally match
 // refactoring the name of the column on User or Post will cause the operation to fail at runtime
 users.orderBy(nameFrom[Post](_.id))
 ```
