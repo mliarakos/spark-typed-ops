@@ -17,6 +17,11 @@ ds.colFrom(_.id) // compiles to: ds.col("id")
 
 // select columns
 ds.selectFrom(_.id, _.name) // compiles to: ds.select(ds.col("id"), ds.col("name"))
+
+// project between case classes
+case class Info(name: String, email: String)
+
+ds.project[Info] // compiles to: ds.select(ds.col("name"), ds.col("email")).as[Info]
 ```
 
 Dataset columns are accessed in a type-safe manner, so errors (e.g. misspelled or non-existent columns) are caught by the compiler. The operations are then converted to equivalent untyped DataFrame operations for improved runtime performance. In addition, the simple approach to specifying columns is easily supported by IDEs for autocompletion and refactoring.  
@@ -167,6 +172,16 @@ users.join(posts, users.colFrom(_.id) === posts.colFrom(_.userId))
 posts.withColumn("preview", substring(posts.colFrom(_.post), 0, 10))
   // posts.withColumn("preview", substring(posts.col("post"), 0, 10))
 ```
+
+The Dataset extensions also provide one new method, `project`, that performs a type-safe projection from one case class to another:
+
+```scala
+case class Info(name: String, email: String)
+
+val info: Dataset[Info] = users.project[Info] // ds.select(ds.col("name"), ds.col("email")).as[Info]
+```
+
+The projection is by column name (regardless of order) and the compiler validates that the needed columns exist and have the correct types.
 
 Most of the Dataset extension methods are provided for convenience to reduce boilerplate code. They can be written using the name/column methods:
 
