@@ -12,6 +12,14 @@ class MacroUsageSpec extends FlatSpec with Matchers with SparkMatchers with Data
   import ops._
   import spark.implicits._
 
+  it should "test" in {
+    val people    = peopleData.toDS()
+    val usernames = usernameData.toDS()
+
+//    usernames.orderBy(people.nameFrom(_.id))
+    usernames.orderBy(colFrom[Person](_.id))
+  }
+
   it should "use a name for a join column" in {
     val people    = peopleData.toDS()
     val usernames = usernameData.toDS()

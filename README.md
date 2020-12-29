@@ -8,29 +8,20 @@ import com.github.mliarakos.spark.sql.typed.ops._
 case class User(id: Int, name: String, email: String)
 
 // create column
-colFrom[User](_.id)
-
-// compiles to:
-col("id")
+colFrom[User](_.id) // compiles to: col("id")
 
 val ds: Dataset[User] = ???
 
 // get a column
-ds.col(_.id)
-
-// compiles to:
-ds.col("id")
+ds.colFrom(_.id) // compiles to: ds.col("id")
 
 // select columns
-ds.selectFrom(_.id, _.name)
-
-// compiles to:
-ds.select(ds.col("id"), ds.col("name"))
+ds.selectFrom(_.id, _.name) // compiles to: ds.select(ds.col("id"), ds.col("name"))
 ```
 
-Dataset columns are specified in a type-safe manner, so errors (e.g. misspelled or non-existent columns) are caught by the compiler. The operations are then converted to equivalent untyped DataFrame operations for improved runtime performance. In addition, the simple approach to specifying columns is easily supported by IDEs for autocompletion and refactoring.  
+Dataset columns are accessed in a type-safe manner, so errors (e.g. misspelled or non-existent columns) are caught by the compiler. The operations are then converted to equivalent untyped DataFrame operations for improved runtime performance. In addition, the simple approach to specifying columns is easily supported by IDEs for autocompletion and refactoring.  
 
-This project was inspired by [Frameless](https://github.com/typelevel/frameless) and [scala-nameof](https://github.com/dwickern/scala-nameof). Its goal is to remain lightweight and not to introduce a new API on top of Spark. As such, it provides only simple type-safe operations for common use cases. For a more complete type-safe extension to Spark, consider [Frameless](https://github.com/typelevel/frameless).
+This project was inspired by [Frameless](https://github.com/typelevel/frameless) and [scala-nameof](https://github.com/dwickern/scala-nameof). Its goal is to remain lightweight and not to introduce a new API on top of Spark. As such, it provides only simple operations with type-safe column access. For a more complete type-safe extension to Spark, consider [Frameless](https://github.com/typelevel/frameless).
 
 ## Getting Started
 
@@ -50,7 +41,7 @@ Spark Types Ops intentionally does not have a compile dependency on Spark. This 
 
 Spark Datasets add type safety to DataFrames, but with a slight trade-off for performance due to the overhead of object serialization and deserialization. There are many common simple use cases where we'd like to avoid the object overhead while maintaining type-safety.
 
-Consider the example of selecting columns from a Dataset as DataFrame:
+Consider the example of selecting columns from a Dataset as a DataFrame:
 
 ```scala
 case class User(id: Int, name: String, email: String)
@@ -169,8 +160,52 @@ users.where(users.colFrom(_.name).like("a%"))   // users.where(users.col("name")
 posts.sort(length(colFrom[Post](_.post)).desc) // posts.sort(length(col("post")).desc)
 
 // join condition
-users.join(posts, users.colFrom(_.id) === posts.colFrom(_.userId)) // users.join(posts, users.col("id") === posts.col("userId"))
+users.join(posts, users.colFrom(_.id) === posts.colFrom(_.userId))
+  // users.join(posts, users.col("id") === posts.col("userId"))
 
 // new column expression
-posts.withColumn("preview", substring(posts.colFrom(_.post), 0, 10)) // posts.withColumn("preview", substring(posts.col("post"), 0, 10))
+posts.withColumn("preview", substring(posts.colFrom(_.post), 0, 10))
+  // posts.withColumn("preview", substring(posts.col("post"), 0, 10))
 ```
+
+Most of the Dataset extension methods are provided for convenience to reduce boilerplate code. They can be written using the name/column methods:
+
+```scala
+// these compile to the same expression
+// ds.orderBy("id", "name")
+users.orderByFrom(_.id, _.name)
+users.orderBy(users.nameFrom(_.id), users.nameFrom(_.name))
+users.orderBy(nameFrom[User](_.id), nameFrom[User](_.name))
+
+// these compile to an equivalent expression
+users.orderBy(users.colFrom(_.id), users.colFrom(_.name))
+users.orderBy(users.colsFrom(_.id, _.name): _*)
+users.orderBy(colFrom[User](_.id), colFrom[User](_.name))
+users.orderBy(colsFrom[User](_.id, _.name): _*)
+```
+
+However, the extension methods also help ensure columns are used in the correct context:
+
+```scala
+// will succeed at runtime
+// the columns are derived from the type of the dataset, so they must be valid on the dataset
+users.orderByFrom(_.id, _.name)
+
+// will fail at runtime
+// although userId is a valid Post column, it is not a valid column on the users dataset
+users.orderBy(nameFrom[Post](_.userId))
+users.orderBy(colFrom[Post](_.userId))
+
+// will fail at runtime
+// although id is a valid posts column and is also a present in the users dataset, the column references the posts
+// dataset and is not actually available on the users dataset
+users.orderBy(posts.colFrom(_.id))
+
+// will succeed at runtime, but is fragile to refactoring
+// id is a valid Post column and is also present in the users dataset, but the operation succeeds only because the 
+// column is specified by name and the names coincidentally match
+// refactoring the name of the column on User or Post will cause the operation to fail at runtime
+users.orderBy(nameFrom[Post](_.id))
+```
+
+In general, the type-safety added by Spark Typed Ops is for column access, not for column usage. Be careful that columns are used in an appropriate context.
