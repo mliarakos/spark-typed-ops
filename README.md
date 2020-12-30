@@ -30,17 +30,23 @@ This project was inspired by [Frameless](https://github.com/typelevel/frameless)
 
 ## Getting Started
 
-Add `spark-typed-ops` as dependency to your project:
+Currently, Spark Typed Ops is available as a development snapshot. Configure your project to use snapshot releases:
 
 ```scala
-"com.github.mliarakos" %% "spark-typed-ops" % "0.1.0"
+resolvers += Resolver.sonatypeRepo("snapshots")
+```
+
+Then, add `spark-typed-ops` as dependency to your project:
+
+```scala
+"com.github.mliarakos" %% "spark-typed-ops" % "0.1.0-SNAPSHOT"
 ```
 
 Spark Types Ops intentionally does not have a compile dependency on Spark. This essentially allows you to use any version of Spark Typed Ops with any version of Spark. The following versions are tested with Spark Typed Ops, but others will most likely work:
 
 | Spark Types Ops | Scala | Spark |
 | --- | --- | --- |
-| 0.1.0 | 2.11 <br/> 2.12 | 2.4.7 <br/> 3.0.1 |
+| 0.1.0-SNAPSHOT | 2.11 <br/> 2.12 | 2.4.7 <br/> 3.0.1 |
 
 ## Motivation
 
