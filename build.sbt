@@ -2,7 +2,7 @@ organization := "com.github.mliarakos"
 name := "spark-typed-ops"
 version := "0.1.0-SNAPSHOT"
 
-val scalaVersions = Seq("2.11.12", "2.12.10")
+val scalaVersions = Seq("2.11.12", "2.12.12")
 crossScalaVersions := scalaVersions
 scalaVersion := scalaVersions.head
 scalacOptions ++= Seq(
