@@ -22,9 +22,11 @@ ds.selectFrom(_.id, _.name) // compiles to: ds.select(ds.col("id"), ds.col("name
 case class Info(name: String, email: String)
 
 ds.project[Info] // compiles to: ds.select(ds.col("name"), ds.col("email")).as[Info]
+
+// ... and more!
 ```
 
-Dataset columns are accessed in a type-safe manner, so errors (e.g. misspelled or non-existent columns) are caught by the compiler. The operations are then converted to equivalent untyped DataFrame operations for improved runtime performance. In addition, the simple approach to specifying columns is easily supported by IDEs for autocompletion and refactoring.  
+Dataset columns are accessed in a type-safe manner, so errors (e.g. misspelled or non-existent columns) are caught by the compiler. The operations are then converted to equivalent untyped DataFrame operations for improved runtime performance. In addition, the simple approach to specifying columns is easily supported by IDEs for autocompletion and refactoring. Find out more about [getting started](#getting-started), the [motivation](#motivation) behind the library, and its complete [usage](#usage).
 
 This project was inspired by [Frameless](https://github.com/typelevel/frameless) and [scala-nameof](https://github.com/dwickern/scala-nameof). Its goal is to remain lightweight and not to introduce a new API on top of Spark. As such, it provides only simple operations with type-safe column access. For a more complete type-safe extension to Spark, consider [Frameless](https://github.com/typelevel/frameless).
 
@@ -189,7 +191,7 @@ val info: Dataset[Info] = users.project[Info] // ds.select(ds.col("name"), ds.co
 
 The projection is by column name (regardless of order) and the compiler validates that the needed columns exist and have the correct types.
 
-Most of the Dataset extension methods are provided for convenience to reduce boilerplate code. They can be written using the name/column methods:
+Many of the Dataset extension methods can be re-written using the name/column methods:
 
 ```scala
 // these compile to the same expression
@@ -205,7 +207,7 @@ users.orderBy(colFrom[User](_.id), colFrom[User](_.name))
 users.orderBy(colsFrom[User](_.id, _.name): _*)
 ```
 
-However, the extension methods also help ensure columns are used in the correct context:
+However, using the extension methods is recommended when possible because they reduce boilerplate and help ensure columns are used in the correct context:
 
 ```scala
 // will succeed at runtime
