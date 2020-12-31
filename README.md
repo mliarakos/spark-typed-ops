@@ -84,7 +84,23 @@ The second approach using `select` uses unsafe string column names, but avoids o
 LocalTableScan <empty>, [id#3, email#5]
 ```
 
-Spark Typed Ops provides Dataset extensions to get both benefits. It uses Scala macros to convert type-safe Dataset operations to efficient DataFrame operations at compile time. The added type-safety helps prevents errors (e.g. misspelled or non-existent columns) without sacrificing performance. It also operates only at compile time using only the existing Spark API so there's no runtime impact.
+In addition, there are some Dataset methods that don't have type-safe versions at all:
+
+```scala
+// these methods have two versions that present the trade-off
+ds.map(user => (user.id, user.name))
+ds.select("id", "name")
+
+ds.groupByKey(user => (user.id, user.name))
+ds.groupBy("id", "name")
+
+// these methods have no type-safe version at all
+ds.describe("id", "name")
+ds.dropDuplicates("id", "name")
+ds.sort("id", "name")
+```
+
+Spark Typed Ops provides Dataset extensions to get both benefits. It uses Scala macros to convert type-safe Dataset operations to efficient DataFrame operations at compile time. The added type-safety helps prevents errors without sacrificing performance. It also operates only at compile time using only the existing Spark API so there's no runtime impact.
 
 ## Usage
 
