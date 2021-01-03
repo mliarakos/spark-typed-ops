@@ -96,7 +96,7 @@ object ops {
   implicit class DatasetOps[A <: Product](val ds: Dataset[A]) extends AnyVal with Serializable {
 
     /**
-      * Get the name of a dataset field.
+      * Get the name of a Dataset field.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -107,7 +107,7 @@ object ops {
     def nameFrom(name: A => Any): String = macro TypedOpsImpl.name
 
     /**
-      * Get the names of dataset fields.
+      * Get the names of Dataset fields.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -146,7 +146,7 @@ object ops {
     def colsFrom(cols: A => Any*): Seq[Column] = macro TypedOpsImpl.datasetColumns
 
     /**
-      * [[Dataset]] cube method with type-safe column access.
+      * Dataset `cube` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -160,7 +160,7 @@ object ops {
     def cubeFrom(cols: A => Any*): RelationalGroupedDataset = macro TypedOpsImpl.datasetCube
 
     /**
-      * [[Dataset]] describe method with type-safe column access.
+      * Dataset `describe` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -174,7 +174,7 @@ object ops {
     def describeFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetDescribe
 
     /**
-      * [[Dataset]] drop method with type-safe column access.
+      * Dataset `drop` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -188,7 +188,7 @@ object ops {
     def dropFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetDrop
 
     /**
-      * [[Dataset]] dropDuplicates method with type-safe column access.
+      * Dataset `dropDuplicates` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -202,7 +202,7 @@ object ops {
     def dropDuplicatesFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetDropDuplicates[A]
 
     /**
-      * [[Dataset]] groupBy method with type-safe column access.
+      * Dataset `groupBy` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -216,7 +216,7 @@ object ops {
     def groupByFrom(cols: A => Any*): RelationalGroupedDataset = macro TypedOpsImpl.datasetGroupBy
 
     /**
-      * [[Dataset]] rollup method with type-safe column access.
+      * Dataset `rollup` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -230,7 +230,7 @@ object ops {
     def rollupFrom(cols: A => Any*): RelationalGroupedDataset = macro TypedOpsImpl.datasetRollup
 
     /**
-      * [[Dataset]] withColumnRenamed method with type-safe column access.
+      * Dataset `withColumnRenamed` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -244,7 +244,7 @@ object ops {
       macro TypedOpsImpl.datasetWithColumnRenamed
 
     /**
-      * [[Dataset]] orderBy method with type-safe column access.
+      * Dataset `orderBy` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -258,7 +258,7 @@ object ops {
     def orderByFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetOrderBy[A]
 
     /**
-      * [[Dataset]] select method with type-safe column access.
+      * Dataset `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -272,7 +272,7 @@ object ops {
     def selectFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetSelect
 
     /**
-      * [[Dataset]] sort method with type-safe column access.
+      * Dataset `sort` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -286,7 +286,7 @@ object ops {
     def sortFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetSort[A]
 
     /**
-      * [[Dataset]] sortWithinPartitions method with type-safe column access.
+      * Dataset `sortWithinPartitions` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -300,7 +300,7 @@ object ops {
     def sortWithinPartitionsFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetSortWithinPartitions[A]
 
     /**
-      * [[Dataset]] typed select method with type-safe column access.
+      * Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -314,7 +314,7 @@ object ops {
       macro TypedOpsImpl.datasetSelectTyped1[B1]
 
     /**
-      * [[Dataset]] typed select method with type-safe column access.
+      * Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -328,7 +328,7 @@ object ops {
       macro TypedOpsImpl.datasetSelectTyped2[B1, B2]
 
     /**
-      * [[Dataset]] typed select method with type-safe column access.
+      * Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -342,7 +342,7 @@ object ops {
       macro TypedOpsImpl.datasetSelectTyped3[B1, B2, B3]
 
     /**
-      * [[Dataset]] typed select method with type-safe column access.
+      * Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -361,7 +361,7 @@ object ops {
       macro TypedOpsImpl.datasetSelectTyped4[B1, B2, B3, B4]
 
     /**
-      * [[Dataset]] typed select method with type-safe column access.
+      * Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -381,7 +381,7 @@ object ops {
       macro TypedOpsImpl.datasetSelectTyped5[B1, B2, B3, B4, B5]
 
     /**
-      * Project the dataset record type to another case class.
+      * Project the Dataset record type to another case class.
       *
       * The target case class must have a subset of the columns with the same names and types in any order. These
       * conditions are verified at compile time.
