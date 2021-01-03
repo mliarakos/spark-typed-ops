@@ -27,7 +27,6 @@ object ops {
     *   Seq("id", "name")
     * }}}
     */
-  @scala.annotation.varargs
   def namesFrom[A <: Product](names: A => Any*): Seq[String] = macro TypedOpsImpl.names
 
   /**
@@ -54,7 +53,6 @@ object ops {
     *
     * @see [[org.apache.spark.sql.functions.col]] for full Spark usage.
     */
-  @scala.annotation.varargs
   def colsFrom[A <: Product](cols: A => Any*): Seq[Column] = macro TypedOpsImpl.columns
 
   /**
@@ -115,7 +113,6 @@ object ops {
       *   Seq("id", "name")
       * }}}
       */
-    @scala.annotation.varargs
     def namesFrom(names: A => Any*): Seq[String] = macro TypedOpsImpl.names
 
     /**
@@ -142,7 +139,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.col]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def colsFrom(cols: A => Any*): Seq[Column] = macro TypedOpsImpl.datasetColumns
 
     /**
@@ -156,7 +152,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.cube]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def cubeFrom(cols: A => Any*): RelationalGroupedDataset = macro TypedOpsImpl.datasetCube
 
     /**
@@ -170,7 +165,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.describe]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def describeFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetDescribe
 
     /**
@@ -184,7 +178,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.drop]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def dropFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetDrop
 
     /**
@@ -198,7 +191,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.dropDuplicates]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def dropDuplicatesFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetDropDuplicates[A]
 
     /**
@@ -212,7 +204,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.groupBy]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def groupByFrom(cols: A => Any*): RelationalGroupedDataset = macro TypedOpsImpl.datasetGroupBy
 
     /**
@@ -226,7 +217,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.rollup]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def rollupFrom(cols: A => Any*): RelationalGroupedDataset = macro TypedOpsImpl.datasetRollup
 
     /**
@@ -254,7 +244,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.orderBy]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def orderByFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetOrderBy[A]
 
     /**
@@ -268,7 +257,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def selectFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetSelect
 
     /**
@@ -282,7 +270,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.sort]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def sortFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetSort[A]
 
     /**
@@ -296,7 +283,6 @@ object ops {
       *
       * @see [[org.apache.spark.sql.Dataset.sortWithinPartitions]] for full Spark usage.
       */
-    @scala.annotation.varargs
     def sortWithinPartitionsFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetSortWithinPartitions[A]
 
     /**
