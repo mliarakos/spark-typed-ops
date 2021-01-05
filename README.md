@@ -190,11 +190,14 @@ posts.sort(length(colFrom[Post](_.post)).desc) // posts.sort(length(col("post"))
 
 // join condition
 users.join(posts, users.colFrom(_.id) === posts.colFrom(_.userId))
-  // users.join(posts, users.col("id") === posts.col("userId"))
+// users.join(posts, users.col("id") === posts.col("userId"))
+
+// select column expression
+users.select(upper(users.colFrom(_.name))) // users.select(upper(users.col("name")))
 
 // new column expression
 posts.withColumn("preview", substring(posts.colFrom(_.post), 0, 10))
-  // posts.withColumn("preview", substring(posts.col("post"), 0, 10))
+// posts.withColumn("preview", substring(posts.col("post"), 0, 10))
 ```
 
 The Dataset extensions also provide one new method, `project`, that performs a type-safe projection from one case class to another:
@@ -236,13 +239,13 @@ users.orderBy(nameFrom[Post](_.userId))
 users.orderBy(colFrom[Post](_.userId))
 
 // will fail at runtime
-// although id is a valid posts column and is also a present on the users dataset, the column references
-// the posts dataset and is not actually available on the users dataset
+// although id is a valid posts column and is also a present on the users dataset, the column
+// references the posts dataset and is not actually available on the users dataset
 users.orderBy(posts.colFrom(_.id))
 
 // will succeed at runtime, but is fragile to refactoring
-// id is a valid Post column and is also present on the users dataset, but it succeeds only because the 
-// column is specified by name and the names coincidentally match
+// id is a valid Post column and is also present on the users dataset, but it succeeds only 
+// because the column is specified by name and the names coincidentally match
 // refactoring the name of the column on User or Post will cause failure at runtime
 users.orderBy(nameFrom[Post](_.id))
 ```
