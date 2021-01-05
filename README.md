@@ -30,6 +30,8 @@ Dataset columns are accessed in a type-safe manner, so errors (e.g. misspelled o
 
 This project was inspired by [Frameless](https://github.com/typelevel/frameless) and [scala-nameof](https://github.com/dwickern/scala-nameof). Its goal is to remain lightweight and not to introduce a new API on top of Spark. As such, it provides only simple operations with type-safe column access. For a more complete type-safe extension to Spark, consider [Frameless](https://github.com/typelevel/frameless).
 
+Spark Typed Ops is currently in pre-release and is looking for feedback. Please comment on this [issue](https://github.com/mliarakos/spark-typed-ops/issues/2) with your thoughts.
+
 ## Getting Started
 
 Currently, Spark Typed Ops is available as a development snapshot. Configure your project to use snapshot releases:
