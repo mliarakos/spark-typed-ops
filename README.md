@@ -8,20 +8,24 @@ import com.github.mliarakos.spark.sql.typed.ops._
 case class User(id: Int, name: String, email: String)
 
 // create column
-colFrom[User](_.id) // compiles to: col("id")
+colFrom[User](_.id) 
+// compiles to: col("id")
 
 val ds: Dataset[User] = ???
 
 // get a column
-ds.colFrom(_.id) // compiles to: ds.col("id")
+ds.colFrom(_.id) 
+// compiles to: ds.col("id")
 
 // select columns
-ds.selectFrom(_.id, _.name) // compiles to: ds.select(ds.col("id"), ds.col("name"))
+ds.selectFrom(_.id, _.name) 
+// compiles to: ds.select(ds.col("id"), ds.col("name"))
 
 // project between case classes
 case class Info(name: String, email: String)
 
-ds.project[Info] // compiles to: ds.select(ds.col("name"), ds.col("email")).as[Info]
+ds.project[Info] 
+// compiles to: ds.select(ds.col("name"), ds.col("email")).as[Info]
 
 // ... and more!
 ```
@@ -186,18 +190,22 @@ val users: Dataset[User] = ???
 val posts: Dataset[Post] = ???
 
 // where conditions
-posts.where(length(colFrom[Post](_.post)) > 10) // posts.where(length(col("post")) > 10)
-users.where(users.colFrom(_.name).like("a%"))   // users.where(users.col("name").like("a%"))
+posts.where(length(colFrom[Post](_.post)) > 10)
+// posts.where(length(col("post")) > 10)
+users.where(users.colFrom(_.name).like("a%"))
+// users.where(users.col("name").like("a%"))
 
 // sort condition
-posts.sort(length(colFrom[Post](_.post)).desc) // posts.sort(length(col("post")).desc)
+posts.sort(length(colFrom[Post](_.post)).desc)
+// posts.sort(length(col("post")).desc)
 
 // join condition
 users.join(posts, users.colFrom(_.id) === posts.colFrom(_.userId))
 // users.join(posts, users.col("id") === posts.col("userId"))
 
 // select column expression
-users.select(upper(users.colFrom(_.name))) // users.select(upper(users.col("name")))
+users.select(upper(users.colFrom(_.name)))
+// users.select(upper(users.col("name")))
 
 // new column expression
 posts.withColumn("preview", substring(posts.colFrom(_.post), 0, 10))
@@ -209,7 +217,8 @@ The Dataset extensions also provide one new method, `project`, that performs a t
 ```scala
 case class Info(name: String, email: String)
 
-val info: Dataset[Info] = users.project[Info] // ds.select(ds.col("name"), ds.col("email")).as[Info]
+val info: Dataset[Info] = users.project[Info]
+// ds.select(ds.col("name"), ds.col("email")).as[Info]
 ```
 
 The projection is by column name (regardless of order) and the compiler validates that the needed columns exist and have the correct types.
