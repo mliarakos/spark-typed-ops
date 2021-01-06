@@ -1,4 +1,4 @@
-# Spark Typed Ops
+# Spark Typed Ops - Lightweight Type-safe Operations for Spark
 
 Spark Typed Ops is a Scala library that provides lightweight type-safe operations for [Spark](https://spark.apache.org/). Perform simple typed [Datasets](https://spark.apache.org/docs/latest/sql-programming-guide.html) operations that compile to efficient DataFrame operations:
 
