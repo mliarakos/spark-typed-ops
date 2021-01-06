@@ -104,7 +104,7 @@ ds.sort("id", "name")
 
 Spark Typed Ops provides Dataset extensions to get both benefits. It converts type-safe Dataset operations to efficient DataFrame operations at compile time. The added type-safety helps prevents errors without sacrificing performance. It also operates mostly at compile time using only the existing Spark API so there's little to no runtime impact.
 
-Most of the operation conversions are implemented using Scala macros, with only the `project` method being implemented with [shapless](https://github.com/milessabin/shapeless). Macros are the preferred implementation because they have broader IDE support for autocompletion and refactoring.
+Most of the operation conversions are implemented using Scala macros, with only the `project` method being implemented with [shapeless](https://github.com/milessabin/shapeless). Macros are the preferred implementation because they have broader IDE support for autocompletion and refactoring.
 
 ## Usage
 
