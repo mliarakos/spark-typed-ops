@@ -2,9 +2,14 @@ package com.github.mliarakos.spark.sql.typed
 
 import com.github.mliarakos.spark.sql.typed.SparkMatchers.SparkExecutionUsesObjectSerializationMatcher
 import com.holdenkarau.spark.testing.DatasetSuiteBase
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.TypedColumn
 import org.scalactic.Equality
-import org.scalatest.matchers.{MatchResult, Matcher}
+import org.scalatest.matchers.MatchResult
+import org.scalatest.matchers.Matcher
 
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -15,6 +20,13 @@ trait SparkMatchers { _: DatasetSuiteBase =>
     override def areEqual(a: Column, b: Any): Boolean = b match {
       case _: Column => a.toString == b.toString
       case _         => false
+    }
+  }
+
+  implicit def typedColumnEquality[A, B]: Equality[TypedColumn[A, B]] = new Equality[TypedColumn[A, B]] {
+    override def areEqual(a: TypedColumn[A, B], b: Any): Boolean = b match {
+      case _: TypedColumn[A @unchecked, B @unchecked] => a.toString == b.toString
+      case _                                          => false
     }
   }
 

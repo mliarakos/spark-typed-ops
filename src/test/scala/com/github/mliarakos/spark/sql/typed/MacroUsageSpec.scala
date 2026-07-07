@@ -2,12 +2,15 @@ package com.github.mliarakos.spark.sql.typed
 
 import com.github.mliarakos.spark.sql.typed.MacroTestFixtures._
 import com.holdenkarau.spark.testing.DatasetSuiteBase
-import org.apache.spark.sql.functions.{col, concat, upper}
-import org.scalatest.{FlatSpec, Matchers}
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.concat
+import org.apache.spark.sql.functions.upper
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.collection.immutable._
 
-class MacroUsageSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSuiteBase with MacroTestFixtures {
+class MacroUsageSpec extends AnyFlatSpec with Matchers with SparkMatchers with DatasetSuiteBase with MacroTestFixtures {
 
   import ops._
   import spark.implicits._
@@ -30,6 +33,12 @@ class MacroUsageSpec extends FlatSpec with Matchers with SparkMatchers with Data
     validate(addresses, people.select("id", "address.street"))
   }
 
+  it should "rename a column for a select" in {
+    val input  = inputData.toDS()
+    val output = input.select(renameFrom[Input, Output](_.id, _.id), renameFrom[Input, Output](_.start_date, _.startDate))
+    validate(output, input.select(col("id").as("id"), col("start_date").as("startDate")))
+  }
+
   it should "create a column expression" in {
     colFrom[Person](_.age) > 0 shouldEqual col("age") > 0
     colFrom[Person](_.age) + 1 shouldEqual col("age") + 1
@@ -50,6 +59,12 @@ class MacroUsageSpec extends FlatSpec with Matchers with SparkMatchers with Data
     val people    = peopleData.toDS()
     val addresses = people.select(people.colFrom(_.id), people.colFrom(_.address.street))
     validate(addresses, people.select(people("id"), people("address.street")))
+  }
+
+  it should "rename a column on a dataset for a select" in {
+    val input  = inputData.toDS()
+    val output = input.select(input.renameFrom[Output](_.id, _.id), input.renameFrom[Output](_.start_date, _.startDate))
+    validate(output, input.select(input("id").as("id"), input("start_date").as("startDate")))
   }
 
   it should "use a column on a dataset for a join condition" in {

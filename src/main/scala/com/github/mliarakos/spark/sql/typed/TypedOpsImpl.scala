@@ -2,7 +2,6 @@ package com.github.mliarakos.spark.sql.typed
 
 import org.apache.spark.sql._
 
-import scala.annotation.tailrec
 import scala.collection.immutable._
 import scala.reflect.macros.blackbox
 
@@ -34,10 +33,12 @@ private[typed] object TypedOpsImpl {
     c.Expr[Seq[Column]](seq)
   }
 
-  def typedColumn[A, B](
-      c: blackbox.Context
-  )(col: c.Expr[Any])(implicit tagA: c.WeakTypeTag[A], tagB: c.WeakTypeTag[B]): c.Expr[TypedColumn[A, B]] = {
+  def typedColumn[A, B](c: blackbox.Context)(col: c.Expr[Any])(implicit tagB: c.WeakTypeTag[B]): c.Expr[TypedColumn[A, B]] = {
     getTypedColumn[A, B](c)(col, tagB, None)
+  }
+
+  def rename(c: blackbox.Context)(from: c.Expr[Any], to: c.Expr[Any]): c.Expr[Column] = {
+    renameColumn(c)(from, to, None)
   }
 
   def datasetColumn(c: blackbox.Context)(col: c.Expr[Any]): c.Expr[Column] = {
@@ -53,6 +54,16 @@ private[typed] object TypedOpsImpl {
     val seq     = q"Seq(..$columns)"
 
     c.Expr[Seq[Column]](seq)
+  }
+
+  def datasetTypedColumn[A, B](c: blackbox.Context)(col: c.Expr[Any])(implicit tagB: c.WeakTypeTag[B]): c.Expr[TypedColumn[A, B]] = {
+    val dataset = getDataset(c)(c.prefix)
+    getTypedColumn[A, B](c)(col, tagB, Some(dataset))
+  }
+
+  def datasetRenameColumn(c: blackbox.Context)(from: c.Expr[Any], to: c.Expr[Any]): c.Expr[Column] = {
+    val dataset = getDataset(c)(c.prefix)
+    renameColumn(c)(from, to, Some(dataset))
   }
 
   def datasetCube(c: blackbox.Context)(cols: c.Expr[Any]*): c.Expr[RelationalGroupedDataset] = {
@@ -120,8 +131,8 @@ private[typed] object TypedOpsImpl {
       c1: c.Expr[Any],
       c2: c.Expr[Any],
       c3: c.Expr[Any]
-  )(
-      implicit tag1: c.WeakTypeTag[B1],
+  )(implicit
+      tag1: c.WeakTypeTag[B1],
       tag2: c.WeakTypeTag[B2],
       tag3: c.WeakTypeTag[B3]
   ): c.Expr[Dataset[(B1, B2, B3)]] = {
@@ -134,8 +145,8 @@ private[typed] object TypedOpsImpl {
       c2: c.Expr[Any],
       c3: c.Expr[Any],
       c4: c.Expr[Any]
-  )(
-      implicit tag1: c.WeakTypeTag[B1],
+  )(implicit
+      tag1: c.WeakTypeTag[B1],
       tag2: c.WeakTypeTag[B2],
       tag3: c.WeakTypeTag[B3],
       tag4: c.WeakTypeTag[B4]
@@ -150,8 +161,8 @@ private[typed] object TypedOpsImpl {
       c3: c.Expr[Any],
       c4: c.Expr[Any],
       c5: c.Expr[Any]
-  )(
-      implicit tag1: c.WeakTypeTag[B1],
+  )(implicit
+      tag1: c.WeakTypeTag[B1],
       tag2: c.WeakTypeTag[B2],
       tag3: c.WeakTypeTag[B3],
       tag4: c.WeakTypeTag[B4],
@@ -179,7 +190,7 @@ private[typed] object TypedOpsImpl {
     import c.universe._
 
     val dataset = getDataset(c)(c.prefix)
-    val columns = cols.zip(tags).map({ case (col, tag) => getTypedColumn(c)(col, tag, Some(dataset)) })
+    val columns = cols.zip(tags).map { case (col, tag) => getTypedColumn(c)(col, tag, Some(dataset)) }
     val select  = q"$dataset.select(..$columns)"
 
     c.Expr[Dataset[_]](select)
@@ -195,7 +206,7 @@ private[typed] object TypedOpsImpl {
     c.Expr[A](op)
   }
 
-  private def getDataset(c: blackbox.Context)(expr: c.Expr[_]): c.Expr[Dataset[_]] = {
+  private[typed] def getDataset(c: blackbox.Context)(expr: c.Expr[_]): c.Expr[Dataset[_]] = {
     import c.universe._
 
     // Assume access is happening via the extension method in the DatasetColumn implicit class
@@ -208,9 +219,17 @@ private[typed] object TypedOpsImpl {
     c.Expr[Dataset[_]](dataset)
   }
 
-  private def getTypedColumn[A, B](
-      c: blackbox.Context
-  )(
+  private def renameColumn(c: blackbox.Context)(from: c.Expr[Any], to: c.Expr[Any], dataset: Option[c.Expr[Dataset[_]]]): c.Expr[Column] = {
+    import c.universe._
+
+    val fromColumn = getColumn(c)(from, dataset)
+    val toName     = name(c)(to)
+    val rename     = q"$fromColumn.as($toName)"
+
+    c.Expr[Column](rename)
+  }
+
+  private[typed] def getTypedColumn[A, B](c: blackbox.Context)(
       column: c.Expr[_],
       tag: c.WeakTypeTag[B],
       dataset: Option[c.Expr[Dataset[_]]] = None
@@ -225,7 +244,7 @@ private[typed] object TypedOpsImpl {
 
   private def getColumn(
       c: blackbox.Context
-  )(column: c.Expr[_], dataset: Option[c.Expr[Dataset[_]]] = None): c.Expr[Column] = {
+  )(column: c.Expr[_], dataset: Option[c.Expr[Dataset[_]]]): c.Expr[Column] = {
     import c.universe._
 
     val columnName = getColumnName(c)(column)
@@ -234,28 +253,22 @@ private[typed] object TypedOpsImpl {
     c.Expr[Column](col)
   }
 
-  private def getColumnName(c: blackbox.Context)(column: c.Expr[_]): c.Expr[String] = {
+  private def getColumnName(c: blackbox.Context)(expr: c.Expr[Any]): c.Expr[String] = {
     import c.universe._
 
-    def extractNames(tree: c.Tree): List[c.Name] = {
-      tree.children.headOption match {
-        case Some(child) => extractNames(child) :+ tree.symbol.name
-        case None        => List(tree.symbol.name)
-      }
+    def extract(tree: c.Tree, param: Symbol): List[String] = tree match {
+      case Select(qualifier, name)          => extract(qualifier, param) :+ name.decodedName.toString // _.foo.bar
+      case Function(params, body)           => extract(body, params.head.symbol)                      // x => x.foo.bar
+      case Block(_, expr)                   => extract(expr, param)                                   // Blocks, type applications, and applies are wrappers
+      case Apply(func, _)                   => extract(func, param)
+      case TypeApply(func, _)               => extract(func, param)
+      case Ident(_) if tree.symbol == param => Nil                                                    // valid root identifier (x$1, x, etc.)
+      case Ident(other)                     => c.abort(c.enclosingPosition, s"Expression must start from the lambda parameter, but found reference to: $other")
+      case other                            => c.abort(c.enclosingPosition, s"Unsupported expression for column extraction: $other")
     }
 
-    @tailrec def extract(tree: c.Tree): List[c.Name] = tree match {
-      case Ident(n)           => List(n)
-      case Select(tree, n)    => extractNames(tree) :+ n
-      case Function(_, body)  => extract(body)
-      case Block(_, expr)     => extract(expr)
-      case Apply(func, _)     => extract(func)
-      case TypeApply(func, _) => extract(func)
-      case _                  => c.abort(c.enclosingPosition, s"Unsupported expression: $column")
-    }
-
-    // drop sth like x$1
-    val columnName = extract(column.tree).drop(1).mkString(".")
+    val columnName = extract(expr.tree, NoSymbol).mkString(".")
+    if (columnName.isEmpty) c.abort(c.enclosingPosition, s"Could not extract name from: $expr")
 
     c.Expr[String](q"$columnName")
   }

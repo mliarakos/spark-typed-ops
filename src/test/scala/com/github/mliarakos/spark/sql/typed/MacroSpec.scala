@@ -3,11 +3,12 @@ package com.github.mliarakos.spark.sql.typed
 import com.github.mliarakos.spark.sql.typed.MacroTestFixtures._
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.apache.spark.sql.functions.col
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.collection.immutable._
 
-class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSuiteBase with MacroTestFixtures {
+class MacroSpec extends AnyFlatSpec with Matchers with SparkMatchers with DatasetSuiteBase with MacroTestFixtures {
 
   import ops._
   import spark.implicits._
@@ -48,6 +49,10 @@ class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSu
     $[Person](_.address.street) shouldEqual $"address.street"
   }
 
+  it should "rename a column" in {
+    renameFrom[Input, Output](_.start_date, _.startDate) shouldEqual col("start_date").as("startDate")
+  }
+
   it should "create a column from a dataset" in {
     val people = peopleData.toDS()
     people.colFrom(_.id) shouldEqual people("id")
@@ -58,6 +63,11 @@ class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSu
     val people  = peopleData.toDS()
     val columns = people.colsFrom(_.id, _.address.street)
     (columns should contain).theSameElementsInOrderAs(Seq(people("id"), people("address.street")))
+  }
+
+  it should "rename a column on a dataset using a type" in {
+    val inputs = inputData.toDS()
+    inputs.renameFrom[Output](_.start_date, _.startDate) shouldEqual inputs("start_date").as("startDate")
   }
 
   it should "cube columns on a dataset" in {
@@ -130,6 +140,14 @@ class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSu
     typedColFrom[Person](_.id) shouldEqual col("id").as[String]
     typedColFrom[Person](_.age) shouldEqual col("age").as[Int]
     typedColFrom[Person](_.address.street) shouldEqual col("address.street").as[String]
+  }
+
+  it should "get typed columns on a dataset" in {
+    val people = peopleData.toDS()
+
+    people.typedColFrom(_.id) shouldEqual people("id").as[String]
+    people.typedColFrom(_.name) shouldEqual people("name").as[String]
+    people.typedColFrom(_.age) shouldEqual people("age").as[Int]
   }
 
   it should "select typed columns on a dataset" in {
