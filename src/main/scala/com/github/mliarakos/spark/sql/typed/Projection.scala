@@ -1,8 +1,11 @@
 package com.github.mliarakos.spark.sql.typed
 
-import org.apache.spark.sql.{Dataset, Encoder}
-import shapeless.ops.{hlist, record}
-import shapeless.{HList, LabelledGeneric}
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.Encoder
+import shapeless.HList
+import shapeless.LabelledGeneric
+import shapeless.ops.hlist
+import shapeless.ops.record
 
 import scala.annotation.implicitNotFound
 import scala.collection.immutable._
@@ -30,8 +33,7 @@ object Projection {
       BRepr <: HList,
       Common <: HList,
       KeysRepr <: HList
-  ](
-      implicit
+  ](implicit
       aGen: LabelledGeneric.Aux[A, ARepr],
       bGen: LabelledGeneric.Aux[B, BRepr],
       inter: hlist.Intersection.Aux[ARepr, BRepr, Common],

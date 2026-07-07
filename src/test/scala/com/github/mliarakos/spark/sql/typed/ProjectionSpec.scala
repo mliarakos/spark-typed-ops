@@ -1,20 +1,24 @@
 package com.github.mliarakos.spark.sql.typed
 
+import com.github.mliarakos.spark.sql.typed.ProjectionSpec._
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.apache.spark.sql.Dataset
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import shapeless.test.illTyped
 
 import scala.collection.immutable._
 import scala.reflect.ClassTag
 
-case class Big(id: String, name: String, age: Int, pets: Seq[String])
-case class Reorder(age: Int, pets: Seq[String], name: String, id: String)
-case class Small(name: String, age: Int)
-case class SmallReorder(age: Int, name: String)
-case class Wrong(recordId: String, name: String, age: Int)
+object ProjectionSpec {
+  final case class Big(id: String, name: String, age: Int, pets: Seq[String])
+  final case class Reorder(age: Int, pets: Seq[String], name: String, id: String)
+  final case class Small(name: String, age: Int)
+  final case class SmallReorder(age: Int, name: String)
+  final case class Wrong(recordId: String, name: String, age: Int)
+}
 
-class ProjectionSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSuiteBase {
+class ProjectionSpec extends AnyFlatSpec with Matchers with SparkMatchers with DatasetSuiteBase {
 
   import ops._
   import spark.implicits._
