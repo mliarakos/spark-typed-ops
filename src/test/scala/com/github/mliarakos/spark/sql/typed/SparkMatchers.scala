@@ -1,6 +1,6 @@
 package com.github.mliarakos.spark.sql.typed
 
-import com.github.mliarakos.spark.sql.typed.SparkMatchers.SparkExecutionUsesObjectSerializationMatcher
+import com.github.mliarakos.spark.sql.typed.SparkMatchers._
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame

@@ -1,21 +1,20 @@
 package com.github.mliarakos.spark.sql.typed
 
+import com.github.mliarakos.spark.sql.typed.{functions => TypedF}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.UnaryExpression
 import org.apache.spark.sql.{functions => F}
-import com.github.mliarakos.spark.sql.typed.{functions => TypedF}
 
 import scala.annotation.tailrec
 import scala.collection.immutable._
 import scala.language.experimental.macros
 import scala.language.higherKinds
-import scala.reflect.runtime.universe._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 
 object transforms {
 
@@ -250,7 +249,7 @@ object transforms {
     }
   }
 
-  /** Type-safe transformation extension methods for [[TypedColumn]]s of [[Iterable]]s. */
+  /** Type-safe transformation extension methods for [[TypedColumn]]s of [[Option]]s. */
   implicit final class TypedColumnOptionTransformTypedOps[Elem](val column: TypedColumn[_, Option[Elem]]) extends AnyVal {
 
     /** Flat-map the optional element in this [[TypedColumn]] using the provided transformation function

@@ -1,6 +1,6 @@
 package com.github.mliarakos.spark.sql.typed
 
-import com.github.mliarakos.spark.sql.typed.MacroTestFixtures._
+import com.github.mliarakos.spark.sql.typed.MacroTestData._
 import com.github.mliarakos.spark.sql.typed.transforms._
 import com.github.mliarakos.spark.sql.typed.{functions => TypedF}
 import com.holdenkarau.spark.testing.DatasetSuiteBase
@@ -10,8 +10,7 @@ import org.scalatest.matchers.should.Matchers
 
 import scala.collection.immutable._
 
-class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers with DatasetSuiteBase with MacroTestFixtures {
-
+class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers with DatasetSuiteBase with MacroTestFixtures with MacroTestData {
   import spark.implicits._
 
   it should "get column name from an unresolved column" in {
@@ -20,15 +19,11 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "get column name from a dataset column" in {
-    val people = peopleData.toDS()
-
     people.column(_.id).getName shouldBe "id"
     people.column(_.address.street).getName shouldBe "address.street"
   }
 
   it should "use orEmpty on a column with type Option[Seq[_]]" in {
-    val events = rawEventData.toDS()
-
     val result   = events.select(events.column(_.details).orEmpty)
     val expected = events.select(F.coalesce(events.col("details"), F.array()).as("details").as[Seq[RawDetail]])
 
@@ -36,19 +31,17 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "transform a dataset using transformTo" in {
-    val input = inputData.toDS()
-
     val result =
-      input.transformTo[Output](
+      inputs.transformTo[Output](
         _.column(_.id).renameTo[Output](_.id),
         _.column(_.start_date).renameTo[Output](_.startDate)
       )
 
     val expected =
-      input
+      inputs
         .select(
-          input.col("id"),
-          input.col("start_date").as("startDate")
+          inputs.col("id"),
+          inputs.col("start_date").as("startDate")
         )
         .as[Output]
 
@@ -56,8 +49,6 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "transform a dataset using transformTo including a column transformTo" in {
-    val people = peopleData.toDS()
-
     val result =
       people.transformTo[Person](
         _.column(_.id),
@@ -85,19 +76,17 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "transform a dataset using transformTo including a column transform" in {
-    val input = inputData.toDS()
-
     val result =
-      input.transformTo[Output](
+      inputs.transformTo[Output](
         _.column(_.id).renameTo[Output](_.id),
         _.column(_.start_date).transform(col => TypedF.replace(col, "-", "_")).renameTo[Output](_.startDate)
       )
 
     val expected =
-      input
+      inputs
         .select(
-          input.col("id"),
-          F.replace(input.col("start_date"), F.lit("-"), F.lit("_")).as("startDate")
+          inputs.col("id"),
+          F.replace(inputs.col("start_date"), F.lit("-"), F.lit("_")).as("startDate")
         )
         .as[Output]
 
@@ -105,19 +94,17 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "transform a dataset using transformTo including a column udfTransform" in {
-    val input = inputData.toDS()
-
     val result =
-      input.transformTo[Output](
+      inputs.transformTo[Output](
         _.column(_.id).renameTo[Output](_.id),
         _.column(_.start_date).udfTransform(_.replace("-", "_")).renameTo[Output](_.startDate)
       )
 
     val expected =
-      input
+      inputs
         .select(
-          input.col("id"),
-          F.replace(input.col("start_date"), F.lit("-"), F.lit("_")).as("startDate")
+          inputs.col("id"),
+          F.replace(inputs.col("start_date"), F.lit("-"), F.lit("_")).as("startDate")
         )
         .as[Output]
 
@@ -125,23 +112,19 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "transform a dataset using transformTo adding a constant column" in {
-    val input = inputData.toDS()
-
     val result =
-      input.transformTo[Output](
+      inputs.transformTo[Output](
         _.column(_.id).renameTo[Output](_.id),
         _ => TypedF.lit("2000-01-02").renameTo[Output](_.startDate)
       )
 
     val expected =
-      input.select(input.col("id"), F.lit("2000-01-02").as("startDate")).as[Output]
+      inputs.select(inputs.col("id"), F.lit("2000-01-02").as("startDate")).as[Output]
 
     validate(result, expected)
   }
 
   it should "map an iterable column" in {
-    val properties = propertyData.toDS()
-
     val result =
       properties.select(
         properties.column(_.values).map(col => TypedF.upper(col))
@@ -156,8 +139,6 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "udfMap an iterable column" in {
-    val properties = propertyData.toDS()
-
     val result =
       properties.select(
         properties.column(_.values).udfMap(_.toUpperCase)
@@ -173,8 +154,6 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "flatMap an iterable column" in {
-    val properties = propertyData.toDS()
-
     val result =
       properties.select(
         properties.column(_.values).flatMap(col => TypedF.split(col, ""))
@@ -189,8 +168,6 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "udfFlatMap an iterable column" in {
-    val properties = propertyData.toDS()
-
     val result =
       properties.select(
         properties.column(_.values).udfFlatMap(_.split("").toSeq)
@@ -206,8 +183,6 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "map an optional column" in {
-    val properties = propertyData.toDS()
-
     val result =
       properties.select(
         properties.column(_.group).map(col => TypedF.upper(col))
@@ -222,8 +197,6 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "udfMap an optional column" in {
-    val properties = propertyData.toDS()
-
     val result =
       properties.select(
         properties.column(_.group).udfMap(_.toUpperCase)
@@ -239,8 +212,6 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "flatMap an optional column" in {
-    val properties = propertyData.toDS()
-
     val result =
       properties.select(
         properties.column(_.group).flatMap(col => F.when(col === "GG", col).as[Option[String]])
@@ -255,8 +226,6 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "udfFlatMap an optional column" in {
-    val properties = propertyData.toDS()
-
     val result =
       properties.select(
         properties.column(_.group).udfFlatMap(value => if (value == "GG") Some(value) else None)
@@ -272,8 +241,6 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
   }
 
   it should "wip" in {
-    val events = rawEventData.toDS()
-
     val result =
       events.transformTo[ParsedEvent](
         _.column(_.event_id).renameTo[ParsedEvent](_.eventId),
