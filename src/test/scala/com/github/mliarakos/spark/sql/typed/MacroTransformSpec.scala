@@ -23,6 +23,23 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
     people.column(_.address.street).getName shouldBe "address.street"
   }
 
+  it should "get column from a dataset" in {
+    people.column(_.id) shouldEqual people.col("id").as("id").as[Int]
+    people.column(_.address.street) shouldEqual people.col("address.street").as("address.street").as[String]
+  }
+
+  it should "rename a column from a dataset" in {
+    people.column(_.id).rename("identifier") shouldEqual people.col("id").as("id").as("identifier").as[Int]
+  }
+
+  it should "rename a column from a dataset using a selection" in {
+    inputs.column(_.start_date).renameTo[Output](_.startDate) shouldEqual inputs.col("start_date").as("start_date").as("startDate").as[String]
+  }
+
+  it should "get field from column from a dataset" in {
+    people.column(_.address).field(_.street) shouldEqual people.col("address").as("address").getField("street").as("street").as[String]
+  }
+
   it should "use orEmpty on a column with type Option[Seq[_]]" in {
     val result   = events.select(events.column(_.details).orEmpty)
     val expected = events.select(F.coalesce(events.col("details"), F.array()).as("details").as[Seq[RawDetail]])
@@ -247,7 +264,7 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
         _.column(_.event_date).renameTo[ParsedEvent](_.eventDate),
         _.column(_.details).orEmpty
           .flatMap { details =>
-            details.field(_.value).map(value => TypedF.struct[ParsedDetail](details.field(_.key), value))
+            details.field(_.value).map(value => TypedF.struct[ParsedDetail](details.field(_.key), value.renameTo[ParsedDetail](_.value)))
           }
           .renameTo[ParsedEvent](_.details)
       )
