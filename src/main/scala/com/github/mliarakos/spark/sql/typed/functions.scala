@@ -7,6 +7,7 @@ import org.apache.spark.sql.{functions => F}
 
 import scala.language.higherKinds
 import scala.reflect.runtime.universe.TypeTag
+import scala.language.experimental.macros
 
 object functions {
 
@@ -34,7 +35,9 @@ object functions {
     F.split(e, pattern).as[Seq[String]]
   }
 
-  def struct[A <: Product: Encoder](cols: TypedColumn[_, _]*): TypedColumn[Any, A] = F.struct(cols: _*).as[A]
+  // def struct[A <: Product: Encoder](cols: TypedColumn[_, _]*): TypedColumn[Any, A] = F.struct(cols: _*).as[A]
+
+  def struct[A <: Product](cols: TypedColumn[_, _]*): TypedColumn[Any, A] = macro TypedColumnOpsMacroImpl.struct[A]
 
   def transform[A: Encoder, B, F[T] <: Seq[T]](
       e: TypedColumn[_, F[A]],

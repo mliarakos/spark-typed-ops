@@ -59,6 +59,64 @@ object TypedColumnOpsMacroImpl {
     c.Expr[TypedColumn[Any, B]](transformedTree)
   }
 
+  def struct[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[org.apache.spark.sql.TypedColumn[_, _]]*): c.Expr[TypedColumn[Any, B]] = {
+    import c.universe._
+
+    // Extract case class fields of B in constructor order
+    val bType   = weakTypeOf[B]
+    val bFields = bType.decls.collect { case m: MethodSymbol if m.isCaseAccessor => (m.name.decodedName.toString, m.returnType) }.toList
+
+    // Validate column count
+    val expectedCount = bFields.length
+    val actualCount   = cols.length
+    if (actualCount != expectedCount)
+      c.abort(c.enclosingPosition, s"Expected $expectedCount columns for selectTo[$bType] but found $actualCount")
+
+    // Extract (column name, result type, column expr) from each TypedColumn[B, X]
+    val columnDetails = cols.toList.map { colExpr =>
+      val columnType = c.typecheck(colExpr.tree).tpe
+      columnType match {
+        case TypeRef(_, _, List(_, resultType)) =>
+          // Extract the column name from the .as("name") alias
+          val name = colExpr.tree match {
+            case q"($_.as($alias).as[$_]($_): $_)" =>
+              alias match {
+                case Literal(Constant(name: String)) => name
+                case _                               => c.abort(alias.pos, s"Column alias must be a literal string")
+              }
+            case _ => c.abort(colExpr.tree.pos, s"""TypedColumn must include .as("fieldName") to match fields by name""")
+          }
+
+          (name, resultType, colExpr)
+        case _ => c.abort(colExpr.tree.pos, s"Expected type TypedColumn[$bType, _] but found type $columnType")
+      }
+    }
+
+    // Collect columns in case class constructor order of B
+    // Validate that every field in B appears exactly once and that the matching column has the correct type
+    val orderedColumns =
+      bFields.map { case (fieldName, fieldType) =>
+        columnDetails.filter { case (columnName, _, _) => columnName == fieldName } match {
+          // One match
+          case (_, resultType, colExpr) :: Nil =>
+            // Validate type
+            if (resultType <:< fieldType) {
+              colExpr
+            } else {
+              c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
+            }
+          // Multiple matches
+          case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra times)")
+          // No matches
+          case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
+        }
+      }
+
+    val structAsTree = q"_root_.org.apache.spark.sql.functions.struct(..$orderedColumns).as[$bType]"
+
+    c.Expr[TypedColumn[Any, B]](structAsTree)
+  }
+
   def selectTo[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[org.apache.spark.sql.TypedColumn[B, _]]*): c.Expr[Dataset[B]] = {
     import c.universe._
 
@@ -106,7 +164,7 @@ object TypedColumnOpsMacroImpl {
               c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
             }
           // Multiple matches
-          case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once")
+          case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra times)")
           // No matches
           case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
         }
