@@ -97,7 +97,7 @@ object transforms {
       }
     }
 
-    /** Rename this [[TypedColumn]] and maintain its type
+    /** Rename this [[TypedColumn]] while maintaining its type
       */
     def rename(name: String): TypedColumn[Input, Field] = column.as(name).asInstanceOf[TypedColumn[Input, Field]]
 
@@ -260,8 +260,8 @@ object transforms {
       *
       * These statements are equivalent:
       * {{{
-      *   column.as("data").flatMap(col => split(col, "-").as[Seq[String]]) // TypedColumn[_, String]
-      *   flatten(transform(column.as("data"), col => split(col, "-"))).as("data").as[String]
+      *   column.as("data").flatMap(col => when(col === "target", col).as[Option[String]]) // TypedColumn[_, Option[String]]
+      *   when(column.isNotNull, when(column === "target", column)).as("data").as[Option[String]]
       * }}}
       */
     def flatMap[B](
@@ -278,8 +278,8 @@ object transforms {
       *
       * These statements are equivalent:
       * {{{
-      *   column.as("data").udfFlatMap(_.split("-")) // TypedColumn[_, String]
-      *   flatten(transform(column.as("data"), col => udf((input: String) => input.split("-")).apply(col))).as("data").as[String]
+      *   column.as("data").udfFlatMap(value => if (value == "target") Some(value) else None) // TypedColumn[_, Option[String]]
+      *   when(column.isNotNull, udf((input: String) => if (value == "target") Some(value) else None).apply(column)).as("data").as[Option[String]]
       * }}}
       */
     def udfFlatMap[B](
@@ -290,7 +290,7 @@ object transforms {
       F.when(column.isNotNull, cachedUdf.apply(column)).as(name).as[Option[B]]
     }
 
-    /** Flat-map the optional element in this [[TypedColumn]] using the provided transformation function
+    /** Map the optional element in this [[TypedColumn]] using the provided transformation function
       *
       * The transformation function must return a [[TypedColumn]]. If using untyped [[Column]]s or functions the result must be cast using `.as[Type]`.
       * Alternatively, the typed functions in `com.github.mliarakos.spark.sql.typed.funcions` can be used as typed equivalents of the built-in Spark functions.
@@ -299,7 +299,7 @@ object transforms {
       * These statements are equivalent:
       * {{{
       *   column.as("data").map(col => upper(col).as[String])
-      *   transform(column.as("data"), col => upper(col)).as("data").as[Seq[String]]
+      *   when(column.isNotNull, upper(column)).as("data").as[String]
       * }}}
       */
     def map[B](func: TypedColumn[_, Elem] => TypedColumn[_, B])(implicit enc1: Encoder[Elem], enc2: Encoder[Option[B]]): TypedColumn[Any, Option[B]] = {
@@ -307,7 +307,7 @@ object transforms {
       F.when(column.isNotNull, func(column.as[Elem])).as(name).as[Option[B]]
     }
 
-    /** Flat-map the optional element in this [[TypedColumn]] using a UDF of the provided transformation function
+    /** Map the optional element in this [[TypedColumn]] using a UDF of the provided transformation function
       *
       * The Scala function is converted to a UDF. The created UDFs are cached to prevent repeated creation of the same UDF. The type of the resulting element is
       * the same as the return type of the function. The name of the column is preserved.
@@ -315,7 +315,7 @@ object transforms {
       * These statements are equivalent:
       * {{{
       *   column.as("data").map(_.toUppercase)
-      *   transform(column.as("data"), col => udf((input: String) => input.toUpperCase).apply(col)).as("data").as[Seq[String]]
+      *   when(column.isNotNull, udf((input: String) => input.toUpperCase).apply(column)).as("data").as[String]
       * }}}
       */
     def udfMap[B: TypeTag](func: Elem => B)(implicit tag: TypeTag[Elem], enc: Encoder[Option[B]]): TypedColumn[Any, Option[B]] = {
@@ -323,6 +323,7 @@ object transforms {
       val cachedUdf = TypedUdfRegistry.getOrCreate(func)
       F.when(column.isNotNull, cachedUdf.apply(column)).as(name).as[Option[B]]
     }
+
   }
 
   implicit final class TypedColumnOptionSeqTypedOps[Input, Elem, Coll[T] <: Seq[T]](val column: TypedColumn[Input, Option[Coll[Elem]]]) extends AnyVal {
