@@ -1,6 +1,7 @@
 package com.github.mliarakos.spark.sql.typed
 
 import com.github.mliarakos.spark.sql.typed.SparkMatchers._
+import com.github.mliarakos.spark.sql.typed.tags.Tagged
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
@@ -25,6 +26,13 @@ trait SparkMatchers { _: DatasetSuiteBase =>
 
   implicit def typedColumnEquality[A, B]: Equality[TypedColumn[A, B]] = new Equality[TypedColumn[A, B]] {
     override def areEqual(a: TypedColumn[A, B], b: Any): Boolean = b match {
+      case _: TypedColumn[A @unchecked, B @unchecked] => a.toString == b.toString
+      case _                                          => false
+    }
+  }
+
+  implicit def taggedTypedColumnEquality[A, B, N <: String]: Equality[Tagged[TypedColumn[A, B], N]] = new Equality[Tagged[TypedColumn[A, B], N]] {
+    override def areEqual(a: Tagged[TypedColumn[A, B], N], b: Any): Boolean = b match {
       case _: TypedColumn[A @unchecked, B @unchecked] => a.toString == b.toString
       case _                                          => false
     }
