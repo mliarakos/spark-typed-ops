@@ -33,6 +33,24 @@ object transforms2 {
       * }}}
       */
     def column[B](selector: A => B): TypedColumn[A, B] = macro TypedColumnOpsMacroImpl2.column[A, B]
+
+    /** Transform the columns of this [[Dataset]] into a new [[Dataset]] of the specified type
+      *
+      * The columns are validated to ensure they match the expected field names and types of the target type.
+      *
+      * These statements are equivalent:
+      * {{{
+      *   inputs.transformTo[Output](
+      *     _.column(_.id).renameTo[Output](_.recordId),
+      *     _.column(_.start_date).renameTo[Output](_.startDate)
+      *   )
+      *   inputs.select(
+      *     inputs("id").as[String].as("recordId").as[String],
+      *     inputs("start_date").as[String].as("startDate").as[String]
+      *   ).as[Output]
+      * }}}
+      */
+    def transformTo[B <: Product](cols: Dataset[A] => Tagged[TypedColumn[_, _], _]*): Dataset[B] = macro TypedColumnOpsMacroImpl2.datasetTransformTo[B]
   }
 
   /** Type-safe transformation extension methods for [[TypedColumn]]s. */
@@ -78,7 +96,7 @@ object transforms2 {
   implicit final class TaggedTypedColumnTransformTypedOps[Input, Field, Name <: String](val column: Tagged[TypedColumn[Input, Field], Name]) extends AnyVal {
 
     /** Get the name of this [[TypedColumn]] */
-    def getName(implicit nameOf: NameOf[Name]): String = nameOf.name
+    def getName(implicit tag: TaggedWith[Name]): String = tag.name
 
   }
 
@@ -99,8 +117,8 @@ object transforms2 {
       */
     def flatMap[B](
         func: TypedColumn[_, Elem] => TypedColumn[_, Option[B]]
-    )(implicit enc1: Encoder[Elem], enc2: Encoder[Option[B]], nameOf: NameOf[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
-      F.when(column.isNotNull, func(column.as[Elem])).as(nameOf.name).as[Option[B]].tagWith[Name]
+    )(implicit enc1: Encoder[Elem], enc2: Encoder[Option[B]], taggedWith: TaggedWith[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
+      F.when(column.isNotNull, func(column.as[Elem])).as(taggedWith.name).as[Option[B]].tagWith[Name]
     }
 
     /** Flat-map the optional element in this [[TypedColumn]] using a UDF of the provided transformation function
@@ -116,9 +134,9 @@ object transforms2 {
       */
     def udfFlatMap[B](
         func: Elem => Option[B]
-    )(implicit tag1: TypeTag[Elem], tag2: TypeTag[Option[B]], enc2: Encoder[Option[B]], nameOf: NameOf[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
+    )(implicit tt1: TypeTag[Elem], tt2: TypeTag[Option[B]], enc: Encoder[Option[B]], tag: TaggedWith[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
       val cachedUdf = TypedUdfRegistry.getOrCreate(func)
-      F.when(column.isNotNull, cachedUdf.apply(column)).as(nameOf.name).as[Option[B]].tagWith[Name]
+      F.when(column.isNotNull, cachedUdf.apply(column)).as(tag.name).as[Option[B]].tagWith[Name]
     }
 
     /** Map the optional element in this [[TypedColumn]] using the provided transformation function
@@ -135,8 +153,8 @@ object transforms2 {
       */
     def map[B](
         func: TypedColumn[_, Elem] => TypedColumn[_, B]
-    )(implicit enc1: Encoder[Elem], enc2: Encoder[Option[B]], nameOf: NameOf[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
-      F.when(column.isNotNull, func(column.as[Elem])).as(nameOf.name).as[Option[B]].tagWith[Name]
+    )(implicit enc1: Encoder[Elem], enc2: Encoder[Option[B]], tag: TaggedWith[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
+      F.when(column.isNotNull, func(column.as[Elem])).as(tag.name).as[Option[B]].tagWith[Name]
     }
 
     /** Map the optional element in this [[TypedColumn]] using a UDF of the provided transformation function
@@ -152,9 +170,9 @@ object transforms2 {
       */
     def udfMap[B: TypeTag](
         func: Elem => B
-    )(implicit tag: TypeTag[Elem], enc: Encoder[Option[B]], nameOf: NameOf[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
+    )(implicit tt: TypeTag[Elem], enc: Encoder[Option[B]], tag: TaggedWith[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
       val cachedUdf = TypedUdfRegistry.getOrCreate(func)
-      F.when(column.isNotNull, cachedUdf.apply(column)).as(nameOf.name).as[Option[B]].tagWith[Name]
+      F.when(column.isNotNull, cachedUdf.apply(column)).as(tag.name).as[Option[B]].tagWith[Name]
     }
 
   }
@@ -173,8 +191,8 @@ object transforms2 {
       *   coalesce(column.as("data"), array()).as("data").as[Seq[String]]
       * }}}
       */
-    def orEmpty(implicit enc: Encoder[Coll[Elem]], nameOf: NameOf[Name]): Tagged[TypedColumn[Input, Coll[Elem]], Name] = {
-      F.coalesce(column, F.array()).as(nameOf.name).as[Coll[Elem]].tagWith[Name]
+    def orEmpty(implicit enc: Encoder[Coll[Elem]], tag: TaggedWith[Name]): Tagged[TypedColumn[Input, Coll[Elem]], Name] = {
+      F.coalesce(column, F.array()).as(tag.name).as[Coll[Elem]].tagWith[Name]
     }
   }
 

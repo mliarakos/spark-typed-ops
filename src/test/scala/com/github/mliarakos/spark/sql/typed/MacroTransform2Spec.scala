@@ -41,6 +41,24 @@ class MacroTransform2Spec extends AnyFlatSpec with Matchers with SparkMatchers w
     people.column(_.address).field(_.street) shouldEqual people.col("address").getField("street").as("street").as[String]
   }
 
+  it should "transform a dataset using transformTo" in {
+    val result =
+      inputs.transformTo[Output](
+        _.column(_.id).renameTo[Output](_.id),
+        _.column(_.start_date).renameTo[Output](_.startDate)
+      )
+
+    val expected =
+      inputs
+        .select(
+          inputs.col("id"),
+          inputs.col("start_date").as("startDate")
+        )
+        .as[Output]
+
+    validate(result, expected)
+  }
+
   it should "use orEmpty on a column with type Option[Seq[_]]" in {
     val result   = events.select(events.column(_.details).orEmpty)
     val expected = events.select(F.coalesce(events.col("details"), F.array()).as("details").as[Seq[RawDetail]])

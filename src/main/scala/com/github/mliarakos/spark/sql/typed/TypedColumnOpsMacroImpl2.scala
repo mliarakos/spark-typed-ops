@@ -1,12 +1,13 @@
 package com.github.mliarakos.spark.sql.typed
 
-import com.github.mliarakos.spark.sql.typed.tags.NameOf
+import com.github.mliarakos.spark.sql.typed.tags.Tagged
+import com.github.mliarakos.spark.sql.typed.tags.TaggedWith
+import org.apache.spark.sql.TypedColumn
 import org.apache.spark.sql._
 
 import scala.collection.immutable._
 import scala.reflect.macros.blackbox
 import scala.reflect.macros.whitebox
-import scala.annotation.tailrec
 
 object TypedColumnOpsMacroImpl2 {
 
@@ -14,25 +15,13 @@ object TypedColumnOpsMacroImpl2 {
     tagWithName(c)(value, name)
   }
 
-  def nameOf[A <: String: c.WeakTypeTag](c: blackbox.Context): c.Expr[NameOf[A]] = {
+  def taggedWith[A <: String: c.WeakTypeTag](c: blackbox.Context): c.Expr[TaggedWith[A]] = {
     import c.universe._
 
-    @tailrec def extract(tpe: Type): String = tpe match {
-      case ConstantType(Constant(name: String)) => name                          // Literal constant type
-      case TypeRef(_, symbol, _)                => extract(symbol.typeSignature) // Type alias, symbols, or refs that eventually resolve to a constant
-      case AnnotatedType(_, underlying)         => extract(underlying)           // Existential or refined types that wrap a constant
-      case other                                => c.abort(c.enclosingPosition, s"Expected a constant string type, but got: $other")
-    }
+    val name       = tagOf(c)(weakTypeOf[A])
+    val taggedWith = q"new _root_.com.github.mliarakos.spark.sql.typed.tags.TaggedWith($name)"
 
-    // val name = weakTypeOf[A] match {
-    //   case ConstantType(Constant(name: String)) => name
-    //   case other                                => c.abort(c.enclosingPosition, s"Expected a constant type, but got: $other")
-    // }
-
-    val name   = extract(weakTypeOf[A])
-    val nameOf = q"new _root_.com.github.mliarakos.spark.sql.typed.tags.NameOf($name)"
-
-    c.Expr[NameOf[A]](nameOf)
+    c.Expr[TaggedWith[A]](taggedWith)
   }
 
   def column[A: c.WeakTypeTag, B: c.WeakTypeTag](c: whitebox.Context)(selector: c.Expr[A => B]): c.Expr[_ <: TypedColumn[A, B]] = {
@@ -79,19 +68,81 @@ object TypedColumnOpsMacroImpl2 {
     tagWithName(c)(renamedColumn, columnName)
   }
 
+  def datasetTransformTo[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[_ => Tagged[TypedColumn[_, _], _]]*): c.Expr[Dataset[B]] = {
+    import c.universe._
+
+    // Extract case class fields of target type in constructor order
+    val targetType   = weakTypeOf[B]
+    val targetFields = targetType.decls.collect { case m: MethodSymbol if m.isCaseAccessor => (m.name.decodedName.toString, m.returnType) }.toList
+
+    // Validate column count
+    val expectedCount = targetFields.length
+    val actualCount   = cols.length
+    if (actualCount != expectedCount) {
+      c.abort(c.enclosingPosition, s"Expected $expectedCount columns for transformTo[$targetType] but found $actualCount")
+    }
+
+    // Extract (column name, column type, column expr) from each (_ => Tagged[TypedColumn[_, _], _]) expression
+    val columnDetails = cols.toList.map { colExpr =>
+      val selectorType = c.typecheck(colExpr.tree).tpe
+      selectorType match {
+        // Match type [_ => Tagged[TypedColumn[_, fieldType], tag]] to extract field type and tag
+        case TypeRef(_, _, List(_, TypeRef(_, _, List(TypeRef(_, _, List(_, columnType)), tag)))) =>
+          val name = tagOf(c)(tag)
+          (name, columnType, colExpr)
+        case _ => c.abort(colExpr.tree.pos, s"Expected expression resulting in a Tagged[TypedColumn[_, _], _], but found: $selectorType")
+      }
+    }
+
+    // Collect columns in case class constructor order of the target type
+    // Validate that every field in of the target type appears exactly once and that the matching column has the correct type
+    val dataset        = extractDataset(c)(c.prefix)
+    val orderedColumns =
+      targetFields.map { case (fieldName, fieldType) =>
+        columnDetails.filter { case (columnName, _, _) => columnName == fieldName } match {
+          // One match
+          case (_, resultType, colExpr) :: Nil =>
+            // Validate type
+            if (resultType <:< fieldType) {
+              // Apply column function to dataset to get the column
+              q"$colExpr.apply($dataset)"
+            } else {
+              c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
+            }
+          // Multiple matches
+          case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra times)")
+          // No matches
+          case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
+        }
+      }
+
+    val selectAsTree = q"$dataset.select(..$orderedColumns).as[$targetType]"
+
+    c.Expr[Dataset[B]](selectAsTree)
+  }
+
   private def tagWithName[A: c.WeakTypeTag, B <: A](c: whitebox.Context)(value: c.Expr[A], name: c.Expr[String]): c.Expr[B] = {
     import c.universe._
 
     val valueType = weakTypeOf[A]
     val nameType  = name.tree match {
       case Literal(Constant(_: String)) => c.typecheck(name.tree).tpe
-      case other                        => c.abort(c.enclosingPosition, s"Expected a literal string, but got: $other")
+      case other                        => c.abort(c.enclosingPosition, s"Expected a String literal, but found: $other")
     }
 
     val taggedType = tq"_root_.com.github.mliarakos.spark.sql.typed.tags.Tagged[$valueType, $nameType]"
     val taggedTree = q"$value.asInstanceOf[$taggedType]"
 
     c.Expr[B](taggedTree)
+  }
+
+  private def tagOf(c: blackbox.Context)(tpe: c.Type): String = {
+    import c.universe._
+
+    tpe match {
+      case ConstantType(Constant(name: String)) => name
+      case other                                => c.abort(c.enclosingPosition, s"Expected a String constant type, but found: $other")
+    }
   }
 
   private def extractDataset(c: blackbox.Context)(expr: c.Expr[_]): c.Expr[Dataset[_]] = {

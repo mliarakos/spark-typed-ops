@@ -16,15 +16,15 @@ object tags {
   def untag[V, N <: String](value: Tagged[V, N]): V = value.asInstanceOf[V]
 
   /** Get the name from the tagged value */
-  def tagOf[V, N <: String: NameOf](value: Tagged[V, N]): String = implicitly[NameOf[N]].name
+  def tagOf[V, N <: String: TaggedWith](value: Tagged[V, N]): String = implicitly[TaggedWith[N]].name
 
   /** Get the name from the name type */
-  def tagOf[N <: String: NameOf]: String = implicitly[NameOf[N]].name
+  def tagOf[N <: String: TaggedWith]: String = implicitly[TaggedWith[N]].name
 
   /** Type-class to get the name from a tagged value */
-  final class NameOf[A](val name: String)
+  final class TaggedWith[A](val name: String)
 
-  object NameOf {
-    implicit def nameOf[N <: String]: NameOf[N] = macro TypedColumnOpsMacroImpl2.nameOf[N]
+  object TaggedWith {
+    implicit def taggedWith[N <: String]: TaggedWith[N] = macro TypedColumnOpsMacroImpl2.taggedWith[N]
   }
 }
