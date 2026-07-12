@@ -164,7 +164,7 @@ object transforms2 {
       *
       * These statements are equivalent:
       * {{{
-      *   column.as("data").map(_.toUppercase)
+      *   column.as("data").udfMap(_.toUppercase)
       *   when(column.isNotNull, udf((input: String) => input.toUpperCase).apply(column)).as("data").as[String]
       * }}}
       */
@@ -188,7 +188,7 @@ object transforms2 {
       * These statements are equivalent:
       * {{{
       *   column.as("data").as[Option[Seq[String]]].orEmpty // TypedColumn[_, Seq[String]]
-      *   coalesce(column.as("data"), array()).as("data").as[Seq[String]]
+      *   coalesce(column, array()).as("data").as[Seq[String]]
       * }}}
       */
     def orEmpty(implicit enc: Encoder[Coll[Elem]], tag: TaggedWith[Name]): Tagged[TypedColumn[Input, Coll[Elem]], Name] = {
