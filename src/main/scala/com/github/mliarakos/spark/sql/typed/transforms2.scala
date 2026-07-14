@@ -75,6 +75,19 @@ object transforms2 {
       */
     def renameTo[From](selector: From => Field): TypedColumn[From, Field] = macro TypedColumnOpsMacroImpl2.renameTo[From, Field]
 
+    /** Transform this [[TypedColumn]] using the provided column transformation function into a new [[TypedColumn]]
+      *
+      * The column transformation function must return a [[TypedColumn]]. If using untyped [[Column]]s or functions the result must be cast using `.as[Type]`.
+      * Alternatively, the typed functions in `com.github.mliarakos.spark.sql.typed.funcions` can be used as typed equivalents of the built-in Spark functions.
+      *
+      * These statements are equivalent:
+      * {{{
+      *   column.transform(col => upper(col).as[String])
+      *   upper(column).as[String]
+      * }}}
+      */
+    def transform[A, B](func: TypedColumn[Input, Field] => TypedColumn[A, B]): TypedColumn[A, B] = func(column)
+
   }
 
   /** Type-safe transformation extension methods for [[TypedColumn]]s of [[Product]]s. */
@@ -97,6 +110,36 @@ object transforms2 {
 
     /** Get the name of this [[TypedColumn]] */
     def getName(implicit tag: TaggedWith[Name]): String = tag.name
+
+    /** Transform this [[TypedColumn]] using the provided column transformation function into a new [[TypedColumn]]
+      *
+      * The column transformation function must return a [[TypedColumn]]. If using untyped [[Column]]s or functions the result must be cast using `.as[Type]`.
+      * Alternatively, the typed functions in `com.github.mliarakos.spark.sql.typed.funcions` can be used as typed equivalents of the built-in Spark functions.
+      * The name of the column is preserved.
+      *
+      * These statements are equivalent:
+      * {{{
+      *   column.as("data").transform(col => upper(col).as[String])
+      *   upper(column).as("data").as[String]
+      * }}}
+      */
+    def transform[B](func: TypedColumn[Input, Field] => TypedColumn[_, B])(implicit taggedWith: TaggedWith[Name]): Tagged[TypedColumn[Any, B], Name] = {
+      val result = func(column)
+      result.as(taggedWith.name).as[B](result.encoder).tagWith[Name]
+    }
+
+    /** Transform this [[TypedColumn]] using a UDF of the provided function into a new [[TypedColumn]]
+      *
+      * The Scala function is converted to a UDF and cached to prevent repeated creation of the same UDF. The type of the resulting column is the same as the
+      * return type of the function. The name of the column is preserved.
+      *
+      * These statements are equivalent:
+      * {{{
+      *   column.as("data").udfTransform(_.toUpperCase)
+      *   udf((input: String) => input.toUpperCase).apply(column).as("data").as[String]
+      * }}}
+      */
+    def udfTransform[B](func: Field => B): Tagged[TypedColumn[Any, B], Name] = macro TypedColumnOpsMacroImpl2.udfTransform[Field, B, Name]
 
   }
 

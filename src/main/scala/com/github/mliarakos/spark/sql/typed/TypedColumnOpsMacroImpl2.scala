@@ -18,7 +18,7 @@ object TypedColumnOpsMacroImpl2 {
   def taggedWith[A <: String: c.WeakTypeTag](c: blackbox.Context): c.Expr[TaggedWith[A]] = {
     import c.universe._
 
-    val name       = tagOf(c)(weakTypeOf[A])
+    val name       = getNameFromTag(c)(weakTypeOf[A])
     val taggedWith = q"new _root_.com.github.mliarakos.spark.sql.typed.tags.TaggedWith($name)"
 
     c.Expr[TaggedWith[A]](taggedWith)
@@ -68,6 +68,29 @@ object TypedColumnOpsMacroImpl2 {
     tagWithName(c)(renamedColumn, columnName)
   }
 
+  def udfTransform[A: c.WeakTypeTag, B: c.WeakTypeTag, Name <: String](c: whitebox.Context)(func: c.Expr[A => B]): c.Expr[Tagged[TypedColumn[Any, B], Name]] = {
+    import c.universe._
+
+    val inputType  = weakTypeOf[A]
+    val returnType = weakTypeOf[B]
+
+    // Construct input TypeTag[A] and return TypeTag[B]
+    val inputTypeTag  = q"_root_.scala.reflect.runtime.universe.typeTag[$inputType]"
+    val returnTypeTag = q"_root_.scala.reflect.runtime.universe.typeTag[$returnType]"
+
+    // Get or create udf from registry to prevent repeated creation of the same udf
+    // Pass implicit TypeTag[A] and TypeTag[B] directly
+    val cachedUdf   = q"_root_.com.github.mliarakos.spark.sql.typed.TypedUdfRegistry.getOrCreate($func)($inputTypeTag, $returnTypeTag)"
+    val typedColumn = extractTaggedTypedColumn(c)(c.prefix)
+    val (_, name)   = extractTaggedColumnByExpr(c)(typedColumn)
+
+    val transformedTree = c.Expr[TypedColumn[Any, B]] {
+      q"$cachedUdf.apply($typedColumn).as($name).as[$returnType]"
+    }
+
+    tagWithName(c)(transformedTree, c.Expr[String](q"$name"))
+  }
+
   def datasetTransformTo[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[_ => Tagged[TypedColumn[_, _], _]]*): c.Expr[Dataset[B]] = {
     import c.universe._
 
@@ -87,8 +110,8 @@ object TypedColumnOpsMacroImpl2 {
       val selectorType = c.typecheck(colExpr.tree).tpe
       selectorType match {
         // Match type [_ => Tagged[TypedColumn[_, fieldType], tag]] to extract field type and tag
-        case TypeRef(_, _, List(_, TypeRef(_, _, List(TypeRef(_, _, List(_, columnType)), tag)))) =>
-          val name = tagOf(c)(tag)
+        case TypeRef(_, _, List(_, taggedColumnType)) =>
+          val (columnType, name) = extractTaggedColumnByType(c)(taggedColumnType)
           (name, columnType, colExpr)
         case _ => c.abort(colExpr.tree.pos, s"Expected expression resulting in a Tagged[TypedColumn[_, _], _], but found: $selectorType")
       }
@@ -136,10 +159,29 @@ object TypedColumnOpsMacroImpl2 {
     c.Expr[B](taggedTree)
   }
 
-  private def tagOf(c: blackbox.Context)(tpe: c.Type): String = {
+  /** Extract the field type (`F`) and tag name (`N`) of a `Tagged[TypedColumn[_, F], N]` expression */
+  private def extractTaggedColumnByExpr(c: blackbox.Context)(taggedColumn: c.Expr[Tagged[TypedColumn[_, _], _]]): (c.Type, String) = {
+    val taggedColumnType = c.typecheck(taggedColumn.tree).tpe
+    extractTaggedColumnByType(c)(taggedColumnType)
+  }
+
+  /** Extract the field type (`F`) and tag name (`N`) of a `Tagged[TypedColumn[_, F], N]` type */
+  private def extractTaggedColumnByType(c: blackbox.Context)(taggedColumnType: c.Type): (c.Type, String) = {
     import c.universe._
 
-    tpe match {
+    val (fieldType, name) = taggedColumnType match {
+      // Match type Tagged[TypedColumn[_, fieldType], tag] to extract field type and tag
+      case TypeRef(_, _, List(TypeRef(_, _, List(_, fieldType)), tag)) => (fieldType, getNameFromTag(c)(tag))
+      case other => c.abort(c.enclosingPosition, s"Expected expression resulting in a Tagged[TypedColumn[_, _], _], but found: $other")
+    }
+
+    (fieldType, name)
+  }
+
+  private def getNameFromTag(c: blackbox.Context)(tagType: c.Type): String = {
+    import c.universe._
+
+    tagType match {
       case ConstantType(Constant(name: String)) => name
       case other                                => c.abort(c.enclosingPosition, s"Expected a String constant type, but found: $other")
     }
@@ -169,6 +211,19 @@ object TypedColumnOpsMacroImpl2 {
     }
 
     c.Expr[TypedColumn[_, _]](typedColumn)
+  }
+
+  private def extractTaggedTypedColumn(c: blackbox.Context)(expr: c.Expr[_]): c.Expr[Tagged[TypedColumn[_, _], _]] = {
+    import c.universe._
+
+    // Assume access is happening via the extension method in the TypedColumnTransformTypedOps implicit class
+    // Get the name of the TypedColumn from the single argument of the implicit class instantiation
+    val taggedTypedColumn = expr.tree match {
+      case Apply(_, List(arg)) => arg
+      case _                   => c.abort(c.enclosingPosition, s"Unsupported expression: $expr")
+    }
+
+    c.Expr[Tagged[TypedColumn[_, _], _]](taggedTypedColumn)
   }
 
   private def extractSelectorName(c: blackbox.Context)(expr: c.Expr[Any]): c.Expr[String] = {

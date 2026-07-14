@@ -25,6 +25,7 @@ object tags {
   final class TaggedWith[A](val name: String)
 
   object TaggedWith {
+    def apply[N <: String](implicit taggedWith: TaggedWith[N]): TaggedWith[N] = taggedWith
     implicit def taggedWith[N <: String]: TaggedWith[N] = macro TypedColumnOpsMacroImpl2.taggedWith[N]
   }
 }
