@@ -2,6 +2,7 @@ package com.github.mliarakos.spark.sql.typed
 
 import com.github.mliarakos.spark.sql.typed.tags._
 import com.github.mliarakos.spark.sql.typed.{functions => TypedF}
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.TypedColumn
@@ -103,6 +104,24 @@ object transforms2 {
       */
     def field[B](selector: Field => B): TypedColumn[Field, B] = macro TypedColumnOpsMacroImpl2.field[Field, B]
 
+    /** Transform the fields of this [[TypedColumn]] to map it to a new [[TypedColumn]] of the specified type
+      *
+      * The fields are validated to ensure they match the expected field names and types of the target type. The name of the column is preserved.
+      *
+      * Uses a macro to rewrite the statement:
+      * {{{
+      *   column.as("data").transformTo[Output](
+      *     _.field(_.id).renameTo[Output](_.recordId),
+      *     _.field(_.start_date).renameTo[Output](_.startDate)
+      *   )
+      *   struct(
+      *    column.getField("id").as[String].as("recordId").as[String],
+      *    column.getField("start_date").as[String].as("startDate").as[String],
+      *   ).as("data").as[Output]
+      * }}}
+      */
+    // def transformTo[B <: Product](fields: TypedColumn[Input, Field] => TypedColumn[B, _]*): TypedColumn[Any, B] = macro TypedColumnOpsMacroImpl2.transformTo[B]
+
   }
 
   /** Type-safe transformation extension methods for tagged [[TypedColumn]]s. */
@@ -141,6 +160,94 @@ object transforms2 {
       */
     def udfTransform[B](func: Field => B): Tagged[TypedColumn[Any, B], Name] = macro TypedColumnOpsMacroImpl2.udfTransform[Field, B, Name]
 
+  }
+
+  /** Type-safe transformation extension methods for [[TypedColumn]]s of [[Iterable]]s. */
+  implicit final class TypedColumnSeqTransformTypedOps[Elem, Coll[T] <: Iterable[T], Name <: String](val column: Tagged[TypedColumn[_, Coll[Elem]], Name])
+      extends AnyVal {
+
+    /** Flat-map the elements of the collection in this [[TypedColumn]] using the provided transformation function
+      *
+      * The transformation function must return a [[TypedColumn]]. If using untyped [[Column]]s or functions the result must be cast using `.as[Type]`.
+      * Alternatively, the typed functions in `com.github.mliarakos.spark.sql.typed.funcions` can be used as typed equivalents of the built-in Spark functions.
+      * The name of the column is preserved.
+      *
+      * These statements are equivalent:
+      * {{{
+      *   column.as("data").flatMap(col => split(col, "-").as[Seq[String]]) // TypedColumn[_, Seq[String]]
+      *   flatten(transform(column.as("data"), col => split(col, "-"))).as("data").as[Seq[String]]
+      * }}}
+      */
+    def flatMap[B, F[_]](
+        func: TypedColumn[_, Elem] => TypedColumn[_, F[B]]
+    )(implicit
+        flattener: SparkFlattener[F[B]],
+        enc1: Encoder[Elem],
+        enc2: Encoder[Coll[B]],
+        taggedWith: TaggedWith[Name]
+    ): Tagged[TypedColumn[Any, Coll[B]], Name] = {
+      flattener.flatten(F.transform(column, col => func(col.as[Elem]))).as(taggedWith.name).as[Coll[B]].tagWith[Name]
+    }
+
+    /** Flat-map the elements of the collection in this [[TypedColumn]] using a UDF of the provided transformation function
+      *
+      * The Scala function is converted to a UDF and cached to prevent repeated creation of the same UDF. The type of the resulting element is the same as the
+      * element type of the return type of the function. The name of the column is preserved.
+      *
+      * These statements are equivalent:
+      * {{{
+      *   column.as("data").udfFlatMap(_.split("-")) // TypedColumn[_, Seq[String]]
+      *   flatten(transform(column), col => udf((input: String) => input.split("-")).apply(col))).as("data").as[Seq[String]]
+      * }}}
+      */
+    def udfFlatMap[B, F[_]](
+        func: Elem => F[B]
+    )(implicit
+        flattener: SparkFlattener[F[B]],
+        tag1: TypeTag[Elem],
+        tag2: TypeTag[F[B]],
+        enc2: Encoder[Coll[B]],
+        taggedWith: TaggedWith[Name]
+    ): Tagged[TypedColumn[Any, Coll[B]], Name] = {
+      val cachedUdf = TypedUdfRegistry.getOrCreate(func)
+      flattener.flatten(F.transform(column, col => cachedUdf.apply(col))).as(taggedWith.name).as[Coll[B]].tagWith[Name]
+    }
+
+    /** Map the elements of the collection in this [[TypedColumn]] using the provided transformation function
+      *
+      * The transformation function must return a [[TypedColumn]]. If using untyped [[Column]]s or functions the result must be cast using `.as[Type]`.
+      * Alternatively, the typed functions in `com.github.mliarakos.spark.sql.typed.funcions` can be used as typed equivalents of the built-in Spark functions.
+      * The name of the column is preserved.
+      *
+      * These statements are equivalent:
+      * {{{
+      *   column.as("data").map(col => upper(col).as[String])
+      *   transform(column, col => upper(col)).as("data").as[Seq[String]]
+      * }}}
+      */
+    def map[B](
+        func: TypedColumn[_, Elem] => TypedColumn[_, B]
+    )(implicit enc1: Encoder[Elem], enc2: Encoder[Coll[B]], taggedWith: TaggedWith[Name]): Tagged[TypedColumn[Any, Coll[B]], Name] = {
+      F.transform(column, col => func(col.as[Elem])).as(taggedWith.name).as[Coll[B]].tagWith[Name]
+    }
+
+    /** Map the elements of the collection in this [[TypedColumn]] using a UDF of the provided transformation function
+      *
+      * The Scala function is converted to a UDF and cached to prevent repeated creation of the same UDF. The type of the resulting element is the same as the
+      * return type of the function. The name of the column is preserved.
+      *
+      * These statements are equivalent:
+      * {{{
+      *   column.as("data").map(_.toUppercase)
+      *   transform(column, col => udf((input: String) => input.toUpperCase).apply(col)).as("data").as[Seq[String]]
+      * }}}
+      */
+    def udfMap[B: TypeTag](
+        func: Elem => B
+    )(implicit tag: TypeTag[Elem], enc: Encoder[Coll[B]], taggedWith: TaggedWith[Name]): Tagged[TypedColumn[Any, Coll[B]], Name] = {
+      val cachedUdf = TypedUdfRegistry.getOrCreate(func)
+      F.transform(column, col => cachedUdf.apply(col)).as(taggedWith.name).as[Coll[B]].tagWith[Name]
+    }
   }
 
   /** Type-safe transformation extension methods for [[TypedColumn]]s of [[Option]]s. */
@@ -191,7 +298,7 @@ object transforms2 {
       * These statements are equivalent:
       * {{{
       *   column.as("data").map(col => upper(col).as[String])
-      *   when(column.isNotNull, upper(column)).as("data").as[String]
+      *   when(column.isNotNull, upper(column)).as("data").as[Option[String]]
       * }}}
       */
     def map[B](
@@ -208,7 +315,7 @@ object transforms2 {
       * These statements are equivalent:
       * {{{
       *   column.as("data").udfMap(_.toUppercase)
-      *   when(column.isNotNull, udf((input: String) => input.toUpperCase).apply(column)).as("data").as[String]
+      *   when(column.isNotNull, udf((input: String) => input.toUpperCase).apply(column)).as("data").as[Option[String]]
       * }}}
       */
     def udfMap[B: TypeTag](
@@ -236,6 +343,22 @@ object transforms2 {
       */
     def orEmpty(implicit enc: Encoder[Coll[Elem]], tag: TaggedWith[Name]): Tagged[TypedColumn[Input, Coll[Elem]], Name] = {
       F.coalesce(column, F.array()).as(tag.name).as[Coll[Elem]].tagWith[Name]
+    }
+  }
+
+  sealed trait SparkFlattener[-T] {
+    def flatten(col: Column): Column
+  }
+
+  object SparkFlattener {
+    def apply[T](implicit flatten: SparkFlattener[T]): SparkFlattener[T] = flatten
+
+    implicit def optionFlattener[A]: SparkFlattener[Option[A]] = new SparkFlattener[Option[A]] {
+      def flatten(col: Column): Column = F.array_compact(col)
+    }
+
+    implicit def seqFlattener[A]: SparkFlattener[scala.Seq[A]] = new SparkFlattener[scala.Seq[A]] {
+      def flatten(col: Column): Column = F.flatten(col)
     }
   }
 

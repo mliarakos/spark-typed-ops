@@ -39,7 +39,7 @@ object functions {
 
   def struct[A <: Product](cols: TypedColumn[_, _]*): TypedColumn[Any, A] = macro TypedColumnOpsMacroImpl.struct[A]
 
-  def transform[A: Encoder, B, F[T] <: Seq[T]](
+  def transform[A: Encoder, B, F[T] <: scala.Seq[T]](
       e: TypedColumn[_, F[A]],
       f: TypedColumn[_, A] => TypedColumn[_, B]
   )(implicit enc: Encoder[F[B]]): TypedColumn[Any, F[B]] = {

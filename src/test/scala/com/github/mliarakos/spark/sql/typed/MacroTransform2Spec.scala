@@ -1,6 +1,7 @@
 package com.github.mliarakos.spark.sql.typed
 
 import com.github.mliarakos.spark.sql.typed.MacroTestData._
+import com.github.mliarakos.spark.sql.typed.tags._
 import com.github.mliarakos.spark.sql.typed.transforms2._
 import com.github.mliarakos.spark.sql.typed.{functions => TypedF}
 import com.holdenkarau.spark.testing.DatasetSuiteBase
@@ -9,7 +10,6 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.immutable._
-import com.github.mliarakos.spark.sql.typed.tags._
 
 class MacroTransform2Spec extends AnyFlatSpec with Matchers with SparkMatchers with DatasetSuiteBase with MacroTestFixtures with MacroTestData {
   import spark.implicits._
@@ -136,6 +136,122 @@ class MacroTransform2Spec extends AnyFlatSpec with Matchers with SparkMatchers w
           F.lit("2000-01-02").as("startDate")
         )
         .as[Output]
+
+    validate(result, expected)
+  }
+
+  it should "map an iterable column" in {
+    val result =
+      properties.select(
+        properties.column(_.values).map(col => TypedF.upper(col))
+      )
+
+    val expected =
+      properties.select(
+        F.transform(properties.col("values"), col => F.upper(col)).as("values").as[Seq[String]]
+      )
+
+    validate(result, expected)
+  }
+
+  it should "udfMap an iterable column" in {
+    val result =
+      properties.select(
+        properties.column(_.values).udfMap(_.toUpperCase)
+      )
+
+    val upperUdf = F.udf((value: String) => value.toUpperCase)
+    val expected =
+      properties.select(
+        F.transform(properties.col("values"), col => upperUdf.apply(col)).as("values").as[Seq[String]]
+      )
+
+    validate(result, expected)
+  }
+
+  it should "flatMap an iterable column" in {
+    val result =
+      properties.select(
+        properties.column(_.values).flatMap(col => TypedF.split(col, ""))
+      )
+
+    val expected =
+      properties.select(
+        F.flatten(F.transform(properties.col("values"), col => F.split(col, ""))).as("values").as[Seq[String]]
+      )
+
+    validate(result, expected)
+  }
+
+  it should "udfFlatMap an iterable column" in {
+    val result =
+      properties.select(
+        properties.column(_.values).udfFlatMap(_.split("").toSeq)
+      )
+
+    val splitUdf = F.udf((value: String) => value.split(""))
+    val expected =
+      properties.select(
+        F.flatten(F.transform(properties.col("values"), col => splitUdf.apply(col))).as("values").as[Seq[String]]
+      )
+
+    validate(result, expected)
+  }
+
+  it should "map an optional column" in {
+    val result =
+      properties.select(
+        properties.column(_.group).map(col => TypedF.upper(col))
+      )
+
+    val expected =
+      properties.select(
+        F.upper(properties.col("group")).as("group").as[Option[String]]
+      )
+
+    validate(result, expected)
+  }
+
+  it should "udfMap an optional column" in {
+    val result =
+      properties.select(
+        properties.column(_.group).udfMap(_.toUpperCase)
+      )
+
+    val upperUdf = F.udf((value: String) => value.toUpperCase)
+    val expected =
+      properties.select(
+        F.when(properties.col("group").isNotNull, upperUdf.apply(properties.col("group"))).as("group").as[Option[String]]
+      )
+
+    validate(result, expected)
+  }
+
+  it should "flatMap an optional column" in {
+    val result =
+      properties.select(
+        properties.column(_.group).flatMap(col => F.when(col === "GG", col).as[Option[String]])
+      )
+
+    val expected =
+      properties.select(
+        F.when(properties.col("group") === "GG", properties.col("group")).as("group").as[Option[String]]
+      )
+
+    validate(result, expected)
+  }
+
+  it should "udfFlatMap an optional column" in {
+    val result =
+      properties.select(
+        properties.column(_.group).udfFlatMap(value => if (value == "GG") Some(value) else None)
+      )
+
+    val filterUdf = F.udf((value: String) => if (value == "GG") Some(value) else None)
+    val expected  =
+      properties.select(
+        F.when(properties.col("group").isNotNull, filterUdf.apply(properties.col("group"))).as("group").as[Option[String]]
+      )
 
     validate(result, expected)
   }
