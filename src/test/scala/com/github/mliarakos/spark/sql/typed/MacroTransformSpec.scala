@@ -264,7 +264,7 @@ class MacroTransformSpec extends AnyFlatSpec with Matchers with SparkMatchers wi
         _.column(_.event_date).renameTo[ParsedEvent](_.eventDate),
         _.column(_.details).orEmpty
           .flatMap { details =>
-            details.field(_.value).map(value => TypedF.struct[ParsedDetail](details.field(_.key), value.renameTo[ParsedDetail](_.value)))
+            details.field(_.value).map(value => TypedF.structOld[ParsedDetail](details.field(_.key), value.renameTo[ParsedDetail](_.value)))
           }
           .renameTo[ParsedEvent](_.details)
       )

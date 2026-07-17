@@ -59,32 +59,30 @@ class MacroTransform2Spec extends AnyFlatSpec with Matchers with SparkMatchers w
     validate(result, expected)
   }
 
-  // it should "transform a dataset using transformTo including a column transformTo" in {
-  //   val result =
-  //     people.transformTo[Person](
-  //       _.column(_.id),
-  //       _.column(_.name),
-  //       _.column(_.age),
-  //       _.column(_.address)
-  //         .transformTo[Address](_.field(_.street), _.field(_.city))
-  //         .renameTo[Person](_.address)
-  //     )
+  it should "transform a dataset using transformTo including a column transformTo" in {
+    val result =
+      people.transformTo[Person](
+        _.column(_.id),
+        _.column(_.name),
+        _.column(_.age),
+        _.column(_.address).transformTo[Address](_.field(_.street), _.field(_.city))
+      )
 
-  //   val expected =
-  //     people
-  //       .select(
-  //         people.col("id"),
-  //         people.col("name"),
-  //         people.col("age"),
-  //         F.struct(
-  //           people.col("address").getField("street").as("street"),
-  //           people.col("address").getField("city").as("city")
-  //         ).as("address")
-  //       )
-  //       .as[Person]
+    val expected =
+      people
+        .select(
+          people.col("id"),
+          people.col("name"),
+          people.col("age"),
+          F.struct(
+            people.col("address").getField("street").as("street"),
+            people.col("address").getField("city").as("city")
+          ).as("address")
+        )
+        .as[Person]
 
-  //   validate(result, expected)
-  // }
+    validate(result, expected)
+  }
 
   it should "transform a dataset using transformTo including a column transform" in {
     val result =
@@ -264,8 +262,20 @@ class MacroTransform2Spec extends AnyFlatSpec with Matchers with SparkMatchers w
   }
 
   it should "wip" in {
-    val x = events.column(_.details).map(col => F.size(col).as[Long])
-    // println(x)
+    val result =
+      events.transformTo[ParsedEvent](
+        _.column(_.event_id).renameTo[ParsedEvent](_.eventId),
+        _.column(_.event_date).renameTo[ParsedEvent](_.eventDate),
+        _.column(_.details).orEmpty
+          .flatMap { details =>
+            details.field(_.value).map(value => TypedF.struct[ParsedDetail](details.field(_.key), value.renameTo[ParsedDetail](_.value)))
+          }
+          .renameTo[ParsedEvent](_.details)
+      )
+
+    result.explain(true)
+    result.printSchema()
+    result.show(false)
   }
 
 }

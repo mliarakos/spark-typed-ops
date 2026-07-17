@@ -104,24 +104,6 @@ object transforms2 {
       */
     def field[B](selector: Field => B): TypedColumn[Field, B] = macro TypedColumnOpsMacroImpl2.field[Field, B]
 
-    /** Transform the fields of this [[TypedColumn]] to map it to a new [[TypedColumn]] of the specified type
-      *
-      * The fields are validated to ensure they match the expected field names and types of the target type. The name of the column is preserved.
-      *
-      * Uses a macro to rewrite the statement:
-      * {{{
-      *   column.as("data").transformTo[Output](
-      *     _.field(_.id).renameTo[Output](_.recordId),
-      *     _.field(_.start_date).renameTo[Output](_.startDate)
-      *   )
-      *   struct(
-      *    column.getField("id").as[String].as("recordId").as[String],
-      *    column.getField("start_date").as[String].as("startDate").as[String],
-      *   ).as("data").as[Output]
-      * }}}
-      */
-    // def transformTo[B <: Product](fields: TypedColumn[Input, Field] => TypedColumn[B, _]*): TypedColumn[Any, B] = macro TypedColumnOpsMacroImpl2.transformTo[B]
-
   }
 
   /** Type-safe transformation extension methods for tagged [[TypedColumn]]s. */
@@ -159,6 +141,25 @@ object transforms2 {
       * }}}
       */
     def udfTransform[B](func: Field => B): Tagged[TypedColumn[Any, B], Name] = macro TypedColumnOpsMacroImpl2.udfTransform[Field, B, Name]
+
+    /** Transform the fields of this [[TypedColumn]] into a new [[TypedColumn]] of the specified type
+      *
+      * The fields are validated to ensure they match the expected field names and types of the target type. The name of the column is preserved.
+      *
+      * Uses a macro to rewrite the statement:
+      * {{{
+      *   column.as("data").transformTo[Output](
+      *     _.field(_.id).renameTo[Output](_.recordId),
+      *     _.field(_.start_date).renameTo[Output](_.startDate)
+      *   )
+      *   struct(
+      *    column.getField("id").as[String].as("recordId").as[String],
+      *    column.getField("start_date").as[String].as("startDate").as[String],
+      *   ).as("data").as[Output]
+      * }}}
+      */
+    def transformTo[B <: Product](fields: TypedColumn[Input, Field] => Tagged[TypedColumn[_, _], _]*): Tagged[TypedColumn[Any, B], Name] =
+      macro TypedColumnOpsMacroImpl2.columnTransformTo[B, Name]
 
   }
 

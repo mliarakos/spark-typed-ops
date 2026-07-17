@@ -94,16 +94,8 @@ object TypedColumnOpsMacroImpl2 {
   def datasetTransformTo[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[_ => Tagged[TypedColumn[_, _], _]]*): c.Expr[Dataset[B]] = {
     import c.universe._
 
-    // Extract case class fields of target type in constructor order
-    val targetType   = weakTypeOf[B]
-    val targetFields = targetType.decls.collect { case m: MethodSymbol if m.isCaseAccessor => (m.name.decodedName.toString, m.returnType) }.toList
-
-    // Validate column count
-    val expectedCount = targetFields.length
-    val actualCount   = cols.length
-    if (actualCount != expectedCount) {
-      c.abort(c.enclosingPosition, s"Expected $expectedCount columns for transformTo[$targetType] but found $actualCount")
-    }
+    // Extract case class fields of target type and validate column count
+    val (targetType, targetFields) = extractAndValidateTargetType[B](c)(cols.length)
 
     // Extract (column name, column type, column expr) from each (_ => Tagged[TypedColumn[_, _], _]) expression
     val columnDetails = cols.toList.map { colExpr =>
@@ -117,31 +109,63 @@ object TypedColumnOpsMacroImpl2 {
       }
     }
 
-    // Collect columns in case class constructor order of the target type
-    // Validate that every field in of the target type appears exactly once and that the matching column has the correct type
     val dataset        = extractDataset(c)(c.prefix)
-    val orderedColumns =
-      targetFields.map { case (fieldName, fieldType) =>
-        columnDetails.filter { case (columnName, _, _) => columnName == fieldName } match {
-          // One match
-          case (_, resultType, colExpr) :: Nil =>
-            // Validate type
-            if (resultType <:< fieldType) {
-              // Apply column function to dataset to get the column
-              q"$colExpr.apply($dataset)"
-            } else {
-              c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
-            }
-          // Multiple matches
-          case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra times)")
-          // No matches
-          case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
-        }
+    val orderedColumns = orderColumns(c)(columnDetails, targetFields).map(colExpr => q"$colExpr.apply($dataset)")
+
+    c.Expr[Dataset[B]] {
+      q"$dataset.select(..$orderedColumns).as[$targetType]"
+    }
+  }
+
+  def columnTransformTo[B: c.WeakTypeTag, Name <: String](c: whitebox.Context)(
+      fields: c.Expr[_ => Tagged[TypedColumn[_, _], _]]*
+  ): c.Expr[Tagged[TypedColumn[Any, B], Name]] = {
+    import c.universe._
+
+    // Extract case class fields of target type and validate column count
+    val (targetType, targetFields) = extractAndValidateTargetType[B](c)(fields.length)
+
+    // Extract (column name, column type, column expr) from each (_ => Tagged[TypedColumn[_, _], _]) expression
+    val columnDetails = fields.toList.map { colExpr =>
+      val selectorType = c.typecheck(colExpr.tree).tpe
+      selectorType match {
+        // Match type [_ => Tagged[TypedColumn[_, fieldType], tag]] to extract field type and tag
+        case TypeRef(_, _, List(_, taggedColumnType)) =>
+          val (columnType, name) = extractTaggedColumnByType(c)(taggedColumnType)
+          (name, columnType, colExpr)
+        case _ => c.abort(colExpr.tree.pos, s"Expected expression resulting in a Tagged[TypedColumn[_, _], _], but found: $selectorType")
       }
+    }
 
-    val selectAsTree = q"$dataset.select(..$orderedColumns).as[$targetType]"
+    val typedColumn    = extractTaggedTypedColumn(c)(c.prefix)
+    val orderedColumns = orderColumns(c)(columnDetails, targetFields).map(colExpr => q"$colExpr.apply($typedColumn)")
 
-    c.Expr[Dataset[B]](selectAsTree)
+    val (_, name) = extractTaggedColumnByExpr(c)(typedColumn)
+    val struct    = c.Expr[TypedColumn[Any, B]] {
+      q"_root_.org.apache.spark.sql.functions.struct(..$orderedColumns).as($name).as[$targetType]"
+    }
+
+    tagWithName(c)(struct, c.Expr[String](q"$name"))
+  }
+
+  def struct[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[Tagged[org.apache.spark.sql.TypedColumn[_, _], _]]*): c.Expr[TypedColumn[Any, B]] = {
+    import c.universe._
+
+    // Extract case class fields of target type and validate column count
+    val (targetType, targetFields) = extractAndValidateTargetType[B](c)(cols.length)
+
+    // Extract (column name, column type, column expr) from each Tagged[TypedColumn[_, _], _] expression
+    val columnDetails = cols.toList.map { colExpr =>
+      val taggedColumnType   = c.typecheck(colExpr.tree).tpe
+      val (columnType, name) = extractTaggedColumnByType(c)(taggedColumnType)
+      (name, columnType, colExpr)
+    }
+
+    val orderedColumns = orderColumns(c)(columnDetails, targetFields)
+
+    c.Expr[TypedColumn[Any, B]] {
+      q"_root_.org.apache.spark.sql.functions.struct(..$orderedColumns).as[$targetType]"
+    }
   }
 
   private def tagWithName[A: c.WeakTypeTag, B <: A](c: whitebox.Context)(value: c.Expr[A], name: c.Expr[String]): c.Expr[B] = {
@@ -159,13 +183,60 @@ object TypedColumnOpsMacroImpl2 {
     c.Expr[B](taggedTree)
   }
 
-  /** Extract the field type (`F`) and tag name (`N`) of a `Tagged[TypedColumn[_, F], N]` expression */
+  /** Extract the type and case class fields of the provided target type and validate that the actual count of input columns/fields matches the target field
+    * count
+    */
+  private def extractAndValidateTargetType[B: c.WeakTypeTag](c: blackbox.Context)(actualCount: Int): (c.Type, List[(String, c.Type)]) = {
+    import c.universe._
+
+    // Extract case class fields of target type in constructor order
+    val targetType   = weakTypeOf[B]
+    val targetFields = targetType.decls.collect { case m: MethodSymbol if m.isCaseAccessor => (m.name.decodedName.toString, m.returnType) }.toList
+
+    // Validate column count
+    val expectedCount = targetFields.length
+    if (actualCount != expectedCount) {
+      c.abort(c.enclosingPosition, s"Expected $expectedCount column(s), but found $actualCount")
+    }
+
+    (targetType, targetFields)
+  }
+
+  /** Match input columns to the fields of the target type in case class constructor order and validate that every field of the target type is matched exactly
+    * once and that the matching column has the correct type
+    */
+  private def orderColumns[A](c: blackbox.Context)(
+      columnDetails: List[(String, c.Type, c.Expr[A])],
+      targetFields: List[(String, c.Type)]
+  ): List[c.Expr[A]] = {
+    // Iterate through each field of the target type
+    targetFields.map { case (fieldName, fieldType) =>
+      // Find matching input column(s) by name
+      columnDetails.filter { case (columnName, _, _) => columnName == fieldName } match {
+        // One match
+        case (_, resultType, colExpr) :: Nil =>
+          // Validate type
+          if (resultType <:< fieldType) {
+            colExpr
+          } else {
+            c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
+          }
+        // Fail on multiple matches
+        case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra time(s))")
+        // Fail on no matches
+        case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
+      }
+    }
+  }
+
+  /** Extract the field type (`F`) and tag name (`N`) from the `Tagged[TypedColumn[_, F], N]` expression */
   private def extractTaggedColumnByExpr(c: blackbox.Context)(taggedColumn: c.Expr[Tagged[TypedColumn[_, _], _]]): (c.Type, String) = {
     val taggedColumnType = c.typecheck(taggedColumn.tree).tpe
+
     extractTaggedColumnByType(c)(taggedColumnType)
   }
 
-  /** Extract the field type (`F`) and tag name (`N`) of a `Tagged[TypedColumn[_, F], N]` type */
+  /** Extract the field type (`F`) and tag name (`N`) from the `Tagged[TypedColumn[_, F], N]` type */
   private def extractTaggedColumnByType(c: blackbox.Context)(taggedColumnType: c.Type): (c.Type, String) = {
     import c.universe._
 

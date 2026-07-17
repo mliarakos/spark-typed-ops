@@ -1,13 +1,14 @@
 package com.github.mliarakos.spark.sql.typed
 
+import com.github.mliarakos.spark.sql.typed.tags.Tagged
 import com.github.mliarakos.spark.sql.typed.transforms.TypedColumnEncoderOps
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.TypedColumn
 import org.apache.spark.sql.{functions => F}
 
+import scala.language.experimental.macros
 import scala.language.higherKinds
 import scala.reflect.runtime.universe.TypeTag
-import scala.language.experimental.macros
 
 object functions {
 
@@ -35,9 +36,9 @@ object functions {
     F.split(e, pattern).as[Seq[String]]
   }
 
-  // def struct[A <: Product: Encoder](cols: TypedColumn[_, _]*): TypedColumn[Any, A] = F.struct(cols: _*).as[A]
+  def structOld[A <: Product](cols: TypedColumn[_, _]*): TypedColumn[Any, A] = macro TypedColumnOpsMacroImpl.struct[A]
 
-  def struct[A <: Product](cols: TypedColumn[_, _]*): TypedColumn[Any, A] = macro TypedColumnOpsMacroImpl.struct[A]
+  def struct[A <: Product](cols: Tagged[TypedColumn[_, _], _]*): TypedColumn[Any, A] = macro TypedColumnOpsMacroImpl2.struct[A]
 
   def transform[A: Encoder, B, F[T] <: scala.Seq[T]](
       e: TypedColumn[_, F[A]],
