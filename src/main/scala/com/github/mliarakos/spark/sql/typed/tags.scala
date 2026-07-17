@@ -1,5 +1,6 @@
 package com.github.mliarakos.spark.sql.typed
 
+import scala.annotation.unused
 import scala.language.experimental.macros
 
 object tags {
@@ -16,7 +17,7 @@ object tags {
   def untag[V, N <: String](value: Tagged[V, N]): V = value.asInstanceOf[V]
 
   /** Get the name from the tagged value */
-  def tagOf[V, N <: String: TaggedWith](value: Tagged[V, N]): String = implicitly[TaggedWith[N]].name
+  def tagOf[V, N <: String: TaggedWith](@unused value: Tagged[V, N]): String = implicitly[TaggedWith[N]].name
 
   /** Get the name from the name type */
   def tagOf[N <: String: TaggedWith]: String = implicitly[TaggedWith[N]].name
