@@ -262,13 +262,14 @@ class MacroTransform2Spec extends AnyFlatSpec with Matchers with SparkMatchers w
   }
 
   it should "wip" in {
+    // TODO: seq/option .map preserve column name?
     val result =
       events.transformTo[ParsedEvent](
         _.column(_.event_id).renameTo[ParsedEvent](_.eventId),
         _.column(_.event_date).renameTo[ParsedEvent](_.eventDate),
         _.column(_.details).orEmpty
           .flatMap { details =>
-            details.field(_.value).map(value => TypedF.struct[ParsedDetail](details.field(_.key), value.renameTo[ParsedDetail](_.value)))
+            details.field(_.value).map(value => TypedF.struct[ParsedDetail](details.field(_.key), value))
           }
           .renameTo[ParsedEvent](_.details)
       )

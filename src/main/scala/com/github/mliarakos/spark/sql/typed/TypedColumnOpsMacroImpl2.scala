@@ -205,10 +205,7 @@ object TypedColumnOpsMacroImpl2 {
   /** Match input columns to the fields of the target type in case class constructor order and validate that every field of the target type is matched exactly
     * once and that the matching column has the correct type
     */
-  private def orderColumns[A](c: blackbox.Context)(
-      columnDetails: List[(String, c.Type, c.Expr[A])],
-      targetFields: List[(String, c.Type)]
-  ): List[c.Expr[A]] = {
+  private def orderColumns[A](c: blackbox.Context)(columnDetails: List[(String, c.Type, c.Expr[A])], targetFields: List[(String, c.Type)]): List[c.Expr[A]] = {
     // Iterate through each field of the target type
     targetFields.map { case (fieldName, fieldType) =>
       // Find matching input column(s) by name
@@ -240,9 +237,10 @@ object TypedColumnOpsMacroImpl2 {
   private def extractTaggedColumnByType(c: blackbox.Context)(taggedColumnType: c.Type): (c.Type, String) = {
     import c.universe._
 
+    // Match type Tagged[TypedColumn[_, fieldType], tag] to extract field type and tag
     val (fieldType, name) = taggedColumnType match {
-      // Match type Tagged[TypedColumn[_, fieldType], tag] to extract field type and tag
-      case TypeRef(_, _, List(TypeRef(_, _, List(_, fieldType)), tag)) => (fieldType, getNameFromTag(c)(tag))
+      case TypeRef(_, _, List(TypeRef(_, _, List(_, fieldType)), tag))                     => (fieldType, getNameFromTag(c)(tag))
+      case TypeRef(_, _, List(ExistentialType(_, TypeRef(_, _, List(_, fieldType))), tag)) => (fieldType, getNameFromTag(c)(tag))
       case other => c.abort(c.enclosingPosition, s"Expected expression resulting in a Tagged[TypedColumn[_, _], _], but found: $other")
     }
 

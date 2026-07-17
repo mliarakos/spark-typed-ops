@@ -267,9 +267,9 @@ object transforms2 {
       * }}}
       */
     def flatMap[B](
-        func: TypedColumn[_, Elem] => TypedColumn[_, Option[B]]
+        func: Tagged[TypedColumn[_, Elem], Name] => TypedColumn[_, Option[B]]
     )(implicit enc1: Encoder[Elem], enc2: Encoder[Option[B]], taggedWith: TaggedWith[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
-      F.when(column.isNotNull, func(column.as[Elem])).as(taggedWith.name).as[Option[B]].tagWith[Name]
+      F.when(column.isNotNull, func(column.as[Elem].tagWith[Name])).as(taggedWith.name).as[Option[B]].tagWith[Name]
     }
 
     /** Flat-map the optional element in this [[TypedColumn]] using a UDF of the provided transformation function
@@ -303,9 +303,9 @@ object transforms2 {
       * }}}
       */
     def map[B](
-        func: TypedColumn[_, Elem] => TypedColumn[_, B]
+        func: Tagged[TypedColumn[_, Elem], Name] => TypedColumn[_, B]
     )(implicit enc1: Encoder[Elem], enc2: Encoder[Option[B]], tag: TaggedWith[Name]): Tagged[TypedColumn[Any, Option[B]], Name] = {
-      F.when(column.isNotNull, func(column.as[Elem])).as(tag.name).as[Option[B]].tagWith[Name]
+      F.when(column.isNotNull, func(column.as[Elem].tagWith[Name])).as(tag.name).as[Option[B]].tagWith[Name]
     }
 
     /** Map the optional element in this [[TypedColumn]] using a UDF of the provided transformation function
@@ -342,8 +342,8 @@ object transforms2 {
       *   coalesce(column, array()).as("data").as[Seq[String]]
       * }}}
       */
-    def orEmpty(implicit enc: Encoder[Coll[Elem]], tag: TaggedWith[Name]): Tagged[TypedColumn[Input, Coll[Elem]], Name] = {
-      F.coalesce(column, F.array()).as(tag.name).as[Coll[Elem]].tagWith[Name]
+    def orEmpty(implicit enc: Encoder[Coll[Elem]], taggedWith: TaggedWith[Name]): Tagged[TypedColumn[Input, Coll[Elem]], Name] = {
+      F.coalesce(column, F.array()).as(taggedWith.name).as[Coll[Elem]].tagWith[Name]
     }
   }
 
