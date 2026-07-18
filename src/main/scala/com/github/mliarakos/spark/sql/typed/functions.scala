@@ -36,9 +36,7 @@ object functions {
     F.split(e, pattern).as[Seq[String]]
   }
 
-  def structOld[A <: Product](cols: TypedColumn[_, _]*): TypedColumn[Any, A] = macro TypedColumnOpsMacroImpl.struct[A]
-
-  def struct[A <: Product](cols: Tagged[TypedColumn[_, _], _]*): TypedColumn[Any, A] = macro TypedColumnOpsMacroImpl2.struct[A]
+  def struct[A <: Product](cols: Tagged[TypedColumn[_, _], _]*): TypedColumn[Any, A] = macro TypedColumnOpsMacroImpl.struct[A]
 
   def transform[A: Encoder, B, F[T] <: scala.Seq[T]](
       e: TypedColumn[_, F[A]],

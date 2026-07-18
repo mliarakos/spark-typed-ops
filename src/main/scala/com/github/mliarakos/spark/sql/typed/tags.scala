@@ -8,7 +8,7 @@ object tags {
   type Tagged[V, N <: String] = V with NameTag[N]
 
   /** Tag the value with the name from the provided string */
-  def tag[V](value: V, name: String): Tagged[V, _ <: String] = macro TypedColumnOpsMacroImpl2.tag[V]
+  def tag[V](value: V, name: String): Tagged[V, _ <: String] = macro TypedColumnOpsMacroImpl.tag[V]
 
   /** Tag the value with the name from the provided name type */
   def tag[V, N <: String](value: V): Tagged[V, N] = value.asInstanceOf[Tagged[V, N]]
@@ -27,6 +27,6 @@ object tags {
 
   object TaggedWith {
     def apply[N <: String](implicit taggedWith: TaggedWith[N]): TaggedWith[N] = taggedWith
-    implicit def taggedWith[N <: String]: TaggedWith[N] = macro TypedColumnOpsMacroImpl2.taggedWith[N]
+    implicit def taggedWith[N <: String]: TaggedWith[N] = macro TypedColumnOpsMacroImpl.taggedWith[N]
   }
 }

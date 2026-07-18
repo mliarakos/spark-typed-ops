@@ -1,301 +1,259 @@
 package com.github.mliarakos.spark.sql.typed
 
+import com.github.mliarakos.spark.sql.typed.tags.Tagged
+import com.github.mliarakos.spark.sql.typed.tags.TaggedWith
+import org.apache.spark.sql.TypedColumn
 import org.apache.spark.sql._
 
 import scala.collection.immutable._
 import scala.reflect.macros.blackbox
+import scala.reflect.macros.whitebox
 
 object TypedColumnOpsMacroImpl {
 
-  def column[A, B: c.WeakTypeTag](c: blackbox.Context)(selector: c.Expr[A => B]): c.Expr[TypedColumn[A, B]] = {
-    import c.universe._
-
-    val dataset         = extractDataset(c)(c.prefix)
-    val columnName      = extractSelectorName(c)(selector)
-    val columnType      = weakTypeOf[B]
-    val typedColumnTree = q"$dataset($columnName).as($columnName).as[$columnType]"
-
-    c.Expr[TypedColumn[A, B]](typedColumnTree)
+  def tag[A: c.WeakTypeTag](c: whitebox.Context)(value: c.Expr[A], name: c.Expr[String]): c.Expr[_ <: A] = {
+    tagWithName(c)(value, name)
   }
 
-  def field[T, B: c.WeakTypeTag](c: blackbox.Context)(selector: c.Expr[T => B]): c.Expr[TypedColumn[T, B]] = {
+  def taggedWith[A <: String: c.WeakTypeTag](c: blackbox.Context): c.Expr[TaggedWith[A]] = {
     import c.universe._
 
-    val typedColumn     = extractTypedColumn(c)(c.prefix)
-    val columnName      = extractSelectorName(c)(selector)
-    val columnType      = weakTypeOf[B]
-    val typedColumnTree = q"$typedColumn.getField($columnName).as($columnName).as[$columnType]"
+    val name       = getNameFromTag(c)(weakTypeOf[A])
+    val taggedWith = q"new _root_.com.github.mliarakos.spark.sql.typed.tags.TaggedWith($name)"
 
-    c.Expr[TypedColumn[T, B]](typedColumnTree)
+    c.Expr[TaggedWith[A]](taggedWith)
   }
 
-  def renameTo[A, B: c.WeakTypeTag](c: blackbox.Context)(selector: c.Expr[A => B]): c.Expr[TypedColumn[A, B]] = {
+  def column[A: c.WeakTypeTag, B: c.WeakTypeTag](c: whitebox.Context)(selector: c.Expr[A => B]): c.Expr[_ <: TypedColumn[A, B]] = {
+    import c.universe._
+
+    val dataset     = extractDataset(c)(c.prefix)
+    val columnName  = extractSelectorName(c)(selector)
+    val columnType  = weakTypeOf[B]
+    val typedColumn = c.Expr[TypedColumn[A, B]](q"$dataset.col($columnName).as[$columnType]")
+
+    tagWithName(c)(typedColumn, columnName)
+  }
+
+  def field[A: c.WeakTypeTag, B: c.WeakTypeTag](c: whitebox.Context)(selector: c.Expr[A => B]): c.Expr[_ <: TypedColumn[A, B]] = {
     import c.universe._
 
     val typedColumn = extractTypedColumn(c)(c.prefix)
     val columnName  = extractSelectorName(c)(selector)
     val columnType  = weakTypeOf[B]
-    val mappedTree  = q"$typedColumn.as($columnName).as[$columnType]"
+    val fieldColumn = c.Expr[TypedColumn[A, B]](q"$typedColumn.getField($columnName).as($columnName).as[$columnType]")
 
-    c.Expr[TypedColumn[A, B]](mappedTree)
+    tagWithName(c)(fieldColumn, columnName)
   }
 
-  def udfTransform[A: c.WeakTypeTag, B: c.WeakTypeTag](c: blackbox.Context)(func: c.Expr[A => B]): c.Expr[TypedColumn[Any, B]] = {
+  def rename[A: c.WeakTypeTag, B: c.WeakTypeTag](c: whitebox.Context)(name: c.Expr[String]): c.Expr[_ <: TypedColumn[A, B]] = {
+    import c.universe._
+
+    val typedColumn   = extractTypedColumn(c)(c.prefix)
+    val inputType     = weakTypeOf[A]
+    val fieldType     = weakTypeOf[B]
+    val renamedColumn = c.Expr[TypedColumn[A, B]](q"$typedColumn.as($name).asInstanceOf[_root_.org.apache.spark.sql.TypedColumn[$inputType, $fieldType]]")
+
+    tagWithName(c)(renamedColumn, name)
+  }
+
+  def renameTo[A: c.WeakTypeTag, B: c.WeakTypeTag](c: whitebox.Context)(selector: c.Expr[A => B]): c.Expr[_ <: TypedColumn[A, B]] = {
+    import c.universe._
+
+    val typedColumn   = extractTypedColumn(c)(c.prefix)
+    val columnName    = extractSelectorName(c)(selector)
+    val columnType    = weakTypeOf[B]
+    val renamedColumn = c.Expr[TypedColumn[A, B]](q"$typedColumn.as($columnName).as[$columnType]")
+
+    tagWithName(c)(renamedColumn, columnName)
+  }
+
+  def udfTransform[A: c.WeakTypeTag, B: c.WeakTypeTag, Name <: String](c: whitebox.Context)(func: c.Expr[A => B]): c.Expr[Tagged[TypedColumn[Any, B], Name]] = {
     import c.universe._
 
     val inputType  = weakTypeOf[A]
     val returnType = weakTypeOf[B]
 
-    // Construct TypeTag[T] and TypeTag[B]
+    // Construct input TypeTag[A] and return TypeTag[B]
     val inputTypeTag  = q"_root_.scala.reflect.runtime.universe.typeTag[$inputType]"
     val returnTypeTag = q"_root_.scala.reflect.runtime.universe.typeTag[$returnType]"
 
     // Get or create udf from registry to prevent repeated creation of the same udf
-    // Pass implicit TypeTag[T] and TypeTag[B] directly
-    val udf             = q"_root_.com.github.mliarakos.spark.sql.typed.TypedUdfRegistry.getOrCreate($func)($inputTypeTag, $returnTypeTag)"
-    val typedColumn     = extractTypedColumn(c)(c.prefix)
-    val transformedTree = q"$udf.apply($typedColumn).as[$returnType]"
+    // Pass implicit TypeTag[A] and TypeTag[B] directly
+    val cachedUdf   = q"_root_.com.github.mliarakos.spark.sql.typed.TypedUdfRegistry.getOrCreate($func)($inputTypeTag, $returnTypeTag)"
+    val typedColumn = extractTaggedTypedColumn(c)(c.prefix)
+    val (_, name)   = extractTaggedColumnByExpr(c)(typedColumn)
 
-    c.Expr[TypedColumn[Any, B]](transformedTree)
+    val transformedTree = c.Expr[TypedColumn[Any, B]] {
+      q"$cachedUdf.apply($typedColumn).as($name).as[$returnType]"
+    }
+
+    tagWithName(c)(transformedTree, c.Expr[String](q"$name"))
   }
 
-  def struct[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[org.apache.spark.sql.TypedColumn[_, _]]*): c.Expr[TypedColumn[Any, B]] = {
+  def datasetTransformTo[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[_ => Tagged[TypedColumn[_, _], _]]*): c.Expr[Dataset[B]] = {
     import c.universe._
 
-    // Extract case class fields of B in constructor order
-    val bType   = weakTypeOf[B]
-    val bFields = bType.decls.collect { case m: MethodSymbol if m.isCaseAccessor => (m.name.decodedName.toString, m.returnType) }.toList
+    // Extract case class fields of target type and validate column count
+    val (targetType, targetFields) = extractAndValidateTargetType[B](c)(cols.length)
 
-    // Validate column count
-    val expectedCount = bFields.length
-    val actualCount   = cols.length
-    if (actualCount != expectedCount)
-      c.abort(c.enclosingPosition, s"Expected $expectedCount columns for selectTo[$bType] but found $actualCount")
-
-    // Extract (column name, result type, column expr) from each TypedColumn[B, X]
+    // Extract (column name, column type, column expr) from each (_ => Tagged[TypedColumn[_, _], _]) expression
     val columnDetails = cols.toList.map { colExpr =>
-      val columnType = c.typecheck(colExpr.tree).tpe
-      columnType match {
-        case TypeRef(_, _, List(_, resultType)) =>
-          // Extract the column name from the .as("name") alias
-          val name = colExpr.tree match {
-            case q"($_.as($alias).as[$_]($_): $_)" =>
-              alias match {
-                case Literal(Constant(name: String)) => name
-                case _                               => c.abort(alias.pos, s"Column alias must be a literal string")
-              }
-            case _ => c.abort(colExpr.tree.pos, s"""TypedColumn must include .as("fieldName") to match fields by name""")
-          }
-
-          (name, resultType, colExpr)
-        case _ => c.abort(colExpr.tree.pos, s"Expected type TypedColumn[$bType, _] but found type $columnType")
+      val selectorType = c.typecheck(colExpr.tree).tpe
+      selectorType match {
+        // Match type [_ => Tagged[TypedColumn[_, fieldType], tag]] to extract field type and tag
+        case TypeRef(_, _, List(_, taggedColumnType)) =>
+          val (columnType, name) = extractTaggedColumnByType(c)(taggedColumnType)
+          (name, columnType, colExpr)
+        case _ => c.abort(colExpr.tree.pos, s"Expected expression resulting in a Tagged[TypedColumn[_, _], _], but found: $selectorType")
       }
     }
 
-    // Collect columns in case class constructor order of B
-    // Validate that every field in B appears exactly once and that the matching column has the correct type
-    val orderedColumns =
-      bFields.map { case (fieldName, fieldType) =>
-        columnDetails.filter { case (columnName, _, _) => columnName == fieldName } match {
-          // One match
-          case (_, resultType, colExpr) :: Nil =>
-            // Validate type
-            if (resultType <:< fieldType) {
-              colExpr
-            } else {
-              c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
-            }
-          // Multiple matches
-          case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra times)")
-          // No matches
-          case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
-        }
-      }
-
-    val structAsTree = q"_root_.org.apache.spark.sql.functions.struct(..$orderedColumns).as[$bType]"
-
-    c.Expr[TypedColumn[Any, B]](structAsTree)
-  }
-
-  def selectTo[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[org.apache.spark.sql.TypedColumn[B, _]]*): c.Expr[Dataset[B]] = {
-    import c.universe._
-
-    // Extract case class fields of B in constructor order
-    val bType   = weakTypeOf[B]
-    val bFields = bType.decls.collect { case m: MethodSymbol if m.isCaseAccessor => (m.name.decodedName.toString, m.returnType) }.toList
-
-    // Validate column count
-    val expectedCount = bFields.length
-    val actualCount   = cols.length
-    if (actualCount != expectedCount)
-      c.abort(c.enclosingPosition, s"Expected $expectedCount columns for selectTo[$bType] but found $actualCount")
-
-    // Extract (column name, result type, column expr) from each TypedColumn[B, X]
-    val columnDetails = cols.toList.map { colExpr =>
-      val columnType = c.typecheck(colExpr.tree).tpe
-      columnType match {
-        case TypeRef(_, _, List(_, resultType)) =>
-          // Extract the column name from the .as("name") alias
-          val name = colExpr.tree match {
-            case q"($_.as($alias).as[$_]($_): $_)" =>
-              alias match {
-                case Literal(Constant(name: String)) => name
-                case _                               => c.abort(alias.pos, s"Column alias must be a literal string")
-              }
-            case _ => c.abort(colExpr.tree.pos, s"""TypedColumn must include .as("fieldName") to match fields by name""")
-          }
-
-          (name, resultType, colExpr)
-        case _ => c.abort(colExpr.tree.pos, s"Expected type TypedColumn[$bType, _] but found type $columnType")
-      }
-    }
-
-    // Collect columns in case class constructor order of B
-    // Validate that every field in B appears exactly once and that the matching column has the correct type
-    val orderedColumns =
-      bFields.map { case (fieldName, fieldType) =>
-        columnDetails.filter { case (columnName, _, _) => columnName == fieldName } match {
-          // One match
-          case (_, resultType, colExpr) :: Nil =>
-            // Validate type
-            if (resultType <:< fieldType) {
-              colExpr
-            } else {
-              c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
-            }
-          // Multiple matches
-          case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra times)")
-          // No matches
-          case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
-        }
-      }
-
-    val dataset      = extractDataset(c)(c.prefix)
-    val selectAsTree = q"$dataset.select(..$orderedColumns).as[$bType]"
-
-    c.Expr[Dataset[B]](selectAsTree)
-  }
-
-  def datasetTransformTo[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[_ => org.apache.spark.sql.TypedColumn[B, _]]*): c.Expr[Dataset[B]] = {
-    import c.universe._
-
-    // Extract case class fields of B in constructor order
-    val bType   = weakTypeOf[B]
-    val bFields = bType.decls.collect { case m: MethodSymbol if m.isCaseAccessor => (m.name.decodedName.toString, m.returnType) }.toList
-
-    // Validate column count
-    val expectedCount = bFields.length
-    val actualCount   = cols.length
-    if (actualCount != expectedCount)
-      c.abort(c.enclosingPosition, s"Expected $expectedCount columns for transformTo[$bType] but found $actualCount")
-
-    // Extract (column name, result type, column expr) from each (_ => TypedColumn[B, X]) expression
-    val columnDetails = cols.toList.map { colExpr =>
-      val columnType = c.typecheck(colExpr.tree).tpe
-      columnType match {
-        // Match [TypedColumn[_, _] => TypedColumn[_, resultType]] to extract column type
-        case TypeRef(_, _, List(_, TypeRef(_, _, List(_, resultType)))) =>
-          // Extract the column name from the .as("name") alias
-          val name = colExpr.tree match {
-            case q"(($_) => ($_.as($alias).as[$_]($_): $_))" =>
-              alias match {
-                case Literal(Constant(name: String)) => name
-                case _                               => c.abort(alias.pos, s"Column alias must be a literal string")
-              }
-            case _ => c.abort(colExpr.tree.pos, s"""TypedColumn must include .as("name") to match fields by name""")
-          }
-
-          (name, resultType, colExpr)
-        case _ => c.abort(colExpr.tree.pos, s"Expected type TypedColumn[$bType, _] but found type $columnType")
-      }
-    }
-
-    // Collect columns in case class constructor order of B
-    // Validate that every field in B appears exactly once and that the matching column has the correct type
     val dataset        = extractDataset(c)(c.prefix)
-    val orderedColumns =
-      bFields.map { case (fieldName, fieldType) =>
-        columnDetails.filter { case (columnName, _, _) => columnName == fieldName } match {
-          // One match
-          case (_, resultType, colExpr) :: Nil =>
-            // Validate type
-            if (resultType <:< fieldType) {
-              // Apply column function to dataset to get the column
-              q"$colExpr.apply($dataset)"
-            } else {
-              c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
-            }
-          // Multiple matches
-          case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra times)")
-          // No matches
-          case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
-        }
-      }
+    val orderedColumns = orderColumns(c)(columnDetails, targetFields).map(colExpr => q"$colExpr.apply($dataset)")
 
-    val selectAsTree = q"$dataset.select(..$orderedColumns).as[$bType]"
-
-    c.Expr[Dataset[B]](selectAsTree)
+    c.Expr[Dataset[B]] {
+      q"$dataset.select(..$orderedColumns).as[$targetType]"
+    }
   }
 
-  def transformTo[B: c.WeakTypeTag](c: blackbox.Context)(fields: c.Expr[_ => org.apache.spark.sql.TypedColumn[B, _]]*): c.Expr[TypedColumn[Any, B]] = {
+  def columnTransformTo[B: c.WeakTypeTag, Name <: String](c: whitebox.Context)(
+      fields: c.Expr[_ => Tagged[TypedColumn[_, _], _]]*
+  ): c.Expr[Tagged[TypedColumn[Any, B], Name]] = {
     import c.universe._
 
-    // Extract case class fields of B in constructor order
-    val bType   = weakTypeOf[B]
-    val bFields = bType.decls.collect { case m: MethodSymbol if m.isCaseAccessor => (m.name.decodedName.toString, m.returnType) }.toList
+    // Extract case class fields of target type and validate column count
+    val (targetType, targetFields) = extractAndValidateTargetType[B](c)(fields.length)
 
-    // Validate column count
-    val expectedCount = bFields.length
-    val actualCount   = fields.length
-    if (actualCount != expectedCount)
-      c.abort(c.enclosingPosition, s"Expected $expectedCount fields for transformTo[$bType] but found $actualCount")
-
-    // Extract (column name, result type, column expr) from each (_ => TypedColumn[B, X]) expression
+    // Extract (column name, column type, column expr) from each (_ => Tagged[TypedColumn[_, _], _]) expression
     val columnDetails = fields.toList.map { colExpr =>
-      val columnType = c.typecheck(colExpr.tree).tpe
-      columnType match {
-        // Match [TypedColumn[_, _] => TypedColumn[_, resultType]] to extract column type
-        case TypeRef(_, _, List(_, TypeRef(_, _, List(_, resultType)))) =>
-          // Extract the column name from the .as("name") alias
-          val name = colExpr.tree match {
-            case q"(($_) => ($_.as($alias).as[$_]($_): $_))" =>
-              alias match {
-                case Literal(Constant(name: String)) => name
-                case _                               => c.abort(alias.pos, s"Column alias must be a literal string")
-              }
-            case _ => c.abort(colExpr.tree.pos, s"""TypedColumn must include .as("name") to match fields by name""")
-          }
-
-          (name, resultType, colExpr)
-        case _ => c.abort(colExpr.tree.pos, s"Expected type TypedColumn[$bType, _] but found type $columnType")
+      val selectorType = c.typecheck(colExpr.tree).tpe
+      selectorType match {
+        // Match type [_ => Tagged[TypedColumn[_, fieldType], tag]] to extract field type and tag
+        case TypeRef(_, _, List(_, taggedColumnType)) =>
+          val (columnType, name) = extractTaggedColumnByType(c)(taggedColumnType)
+          (name, columnType, colExpr)
+        case _ => c.abort(colExpr.tree.pos, s"Expected expression resulting in a Tagged[TypedColumn[_, _], _], but found: $selectorType")
       }
     }
 
-    // Collect columns in case class constructor order of B
-    // Validate that every field in B appears exactly once and that the matching column has the correct type
-    val typedColumn    = extractTypedColumn(c)(c.prefix)
-    val orderedColumns =
-      bFields.map { case (fieldName, fieldType) =>
-        columnDetails.filter { case (columnName, _, _) => columnName == fieldName } match {
-          // One match
-          case (_, resultType, colExpr) :: Nil =>
-            // Validate type
-            if (resultType <:< fieldType) {
-              // Apply column function to column to get the field
-              q"$colExpr.apply($typedColumn)"
-            } else {
-              c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
-            }
-          // Multiple matches
-          case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra times)")
-          // No matches
-          case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
-        }
+    val typedColumn    = extractTaggedTypedColumn(c)(c.prefix)
+    val orderedColumns = orderColumns(c)(columnDetails, targetFields).map(colExpr => q"$colExpr.apply($typedColumn)")
+
+    val (_, name) = extractTaggedColumnByExpr(c)(typedColumn)
+    val struct    = c.Expr[TypedColumn[Any, B]] {
+      q"_root_.org.apache.spark.sql.functions.struct(..$orderedColumns).as($name).as[$targetType]"
+    }
+
+    tagWithName(c)(struct, c.Expr[String](q"$name"))
+  }
+
+  def struct[B: c.WeakTypeTag](c: blackbox.Context)(cols: c.Expr[Tagged[org.apache.spark.sql.TypedColumn[_, _], _]]*): c.Expr[TypedColumn[Any, B]] = {
+    import c.universe._
+
+    // Extract case class fields of target type and validate column count
+    val (targetType, targetFields) = extractAndValidateTargetType[B](c)(cols.length)
+
+    // Extract (column name, column type, column expr) from each Tagged[TypedColumn[_, _], _] expression
+    val columnDetails = cols.toList.map { colExpr =>
+      val taggedColumnType   = c.typecheck(colExpr.tree).tpe
+      val (columnType, name) = extractTaggedColumnByType(c)(taggedColumnType)
+      (name, columnType, colExpr)
+    }
+
+    val orderedColumns = orderColumns(c)(columnDetails, targetFields)
+
+    c.Expr[TypedColumn[Any, B]] {
+      q"_root_.org.apache.spark.sql.functions.struct(..$orderedColumns).as[$targetType]"
+    }
+  }
+
+  private def tagWithName[A: c.WeakTypeTag, B <: A](c: whitebox.Context)(value: c.Expr[A], name: c.Expr[String]): c.Expr[B] = {
+    import c.universe._
+
+    val valueType = weakTypeOf[A]
+    val nameType  = name.tree match {
+      case Literal(Constant(_: String)) => c.typecheck(name.tree).tpe
+      case other                        => c.abort(c.enclosingPosition, s"Expected a String literal, but found: $other")
+    }
+
+    val taggedType = tq"_root_.com.github.mliarakos.spark.sql.typed.tags.Tagged[$valueType, $nameType]"
+    val taggedTree = q"$value.asInstanceOf[$taggedType]"
+
+    c.Expr[B](taggedTree)
+  }
+
+  /** Extract the type and case class fields of the provided target type and validate that the actual count of input columns/fields matches the target field
+    * count
+    */
+  private def extractAndValidateTargetType[B: c.WeakTypeTag](c: blackbox.Context)(actualCount: Int): (c.Type, List[(String, c.Type)]) = {
+    import c.universe._
+
+    // Extract case class fields of target type in constructor order
+    val targetType   = weakTypeOf[B]
+    val targetFields = targetType.decls.collect { case m: MethodSymbol if m.isCaseAccessor => (m.name.decodedName.toString, m.returnType) }.toList
+
+    // Validate column count
+    val expectedCount = targetFields.length
+    if (actualCount != expectedCount) {
+      c.abort(c.enclosingPosition, s"Expected $expectedCount column(s), but found $actualCount")
+    }
+
+    (targetType, targetFields)
+  }
+
+  /** Match input columns to the fields of the target type in case class constructor order and validate that every field of the target type is matched exactly
+    * once and that the matching column has the correct type
+    */
+  private def orderColumns[A](c: blackbox.Context)(columnDetails: List[(String, c.Type, c.Expr[A])], targetFields: List[(String, c.Type)]): List[c.Expr[A]] = {
+    // Iterate through each field of the target type
+    targetFields.map { case (fieldName, fieldType) =>
+      // Find matching input column(s) by name
+      columnDetails.filter { case (columnName, _, _) => columnName == fieldName } match {
+        // One match
+        case (_, resultType, colExpr) :: Nil =>
+          // Validate type
+          if (resultType <:< fieldType) {
+            colExpr
+          } else {
+            c.abort(colExpr.tree.pos, s"Column for field '$fieldName' has type $resultType but expected type $fieldType")
+          }
+        // Fail on multiple matches
+        case (_, _, colExpr) :: tail => c.abort(colExpr.tree.pos, s"Column for field '$fieldName' occurs more than once (${tail.length} extra time(s))")
+        // Fail on no matches
+        case Nil => c.abort(c.enclosingPosition, s"Missing column for field '$fieldName' of type $fieldType")
       }
+    }
+  }
 
-    val structAsTree = q"_root_.org.apache.spark.sql.functions.struct(..$orderedColumns).as[$bType]"
+  /** Extract the field type (`F`) and tag name (`N`) from the `Tagged[TypedColumn[_, F], N]` expression */
+  private def extractTaggedColumnByExpr(c: blackbox.Context)(taggedColumn: c.Expr[Tagged[TypedColumn[_, _], _]]): (c.Type, String) = {
+    val taggedColumnType = c.typecheck(taggedColumn.tree).tpe
 
-    c.Expr[TypedColumn[Any, B]](structAsTree)
+    extractTaggedColumnByType(c)(taggedColumnType)
+  }
+
+  /** Extract the field type (`F`) and tag name (`N`) from the `Tagged[TypedColumn[_, F], N]` type */
+  private def extractTaggedColumnByType(c: blackbox.Context)(taggedColumnType: c.Type): (c.Type, String) = {
+    import c.universe._
+
+    // Match type Tagged[TypedColumn[_, fieldType], tag] to extract field type and tag
+    val (fieldType, name) = taggedColumnType match {
+      case TypeRef(_, _, List(TypeRef(_, _, List(_, fieldType)), tag))                     => (fieldType, getNameFromTag(c)(tag))
+      case TypeRef(_, _, List(ExistentialType(_, TypeRef(_, _, List(_, fieldType))), tag)) => (fieldType, getNameFromTag(c)(tag))
+      case other => c.abort(c.enclosingPosition, s"Expected expression resulting in a Tagged[TypedColumn[_, _], _], but found: $other")
+    }
+
+    (fieldType, name)
+  }
+
+  private def getNameFromTag(c: blackbox.Context)(tagType: c.Type): String = {
+    import c.universe._
+
+    tagType match {
+      case ConstantType(Constant(name: String)) => name
+      case other                                => c.abort(c.enclosingPosition, s"Expected a String constant type, but found: $other")
+    }
   }
 
   private def extractDataset(c: blackbox.Context)(expr: c.Expr[_]): c.Expr[Dataset[_]] = {
@@ -322,6 +280,19 @@ object TypedColumnOpsMacroImpl {
     }
 
     c.Expr[TypedColumn[_, _]](typedColumn)
+  }
+
+  private def extractTaggedTypedColumn(c: blackbox.Context)(expr: c.Expr[_]): c.Expr[Tagged[TypedColumn[_, _], _]] = {
+    import c.universe._
+
+    // Assume access is happening via the extension method in the TypedColumnTransformTypedOps implicit class
+    // Get the name of the TypedColumn from the single argument of the implicit class instantiation
+    val taggedTypedColumn = expr.tree match {
+      case Apply(_, List(arg)) => arg
+      case _                   => c.abort(c.enclosingPosition, s"Unsupported expression: $expr")
+    }
+
+    c.Expr[Tagged[TypedColumn[_, _], _]](taggedTypedColumn)
   }
 
   private def extractSelectorName(c: blackbox.Context)(expr: c.Expr[Any]): c.Expr[String] = {
