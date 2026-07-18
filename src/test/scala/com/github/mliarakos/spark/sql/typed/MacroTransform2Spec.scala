@@ -261,8 +261,7 @@ class MacroTransform2Spec extends AnyFlatSpec with Matchers with SparkMatchers w
     validate(result, expected)
   }
 
-  it should "wip" in {
-    // TODO: seq/option .map preserve column name?
+  it should "transform a dataset using transformTo with a orEmpty and a nested flatMap and map" in {
     val result =
       events.transformTo[ParsedEvent](
         _.column(_.event_id).renameTo[ParsedEvent](_.eventId),
@@ -271,12 +270,24 @@ class MacroTransform2Spec extends AnyFlatSpec with Matchers with SparkMatchers w
           .flatMap { details =>
             details.field(_.value).map(value => TypedF.struct[ParsedDetail](details.field(_.key), value))
           }
-          .renameTo[ParsedEvent](_.details)
       )
 
-    result.explain(true)
-    result.printSchema()
-    result.show(false)
+    val expected =
+      events
+        .select(
+          events.col("event_id").as("eventId").as[Int],
+          events.col("event_date").as("eventDate").as[String],
+          F.array_compact(
+            F.transform(
+              F.coalesce(events.col("details"), F.array()),
+              col => F.when(col.getField("value").isNotNull, F.struct(col.getField("key"), col.getField("value")))
+            )
+          ).as("details")
+            .as[Seq[ParsedDetail]]
+        )
+        .as[ParsedEvent]
+
+    validate(result, expected)
   }
 
 }
