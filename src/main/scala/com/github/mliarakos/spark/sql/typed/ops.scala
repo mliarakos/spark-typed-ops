@@ -7,8 +7,7 @@ import scala.language.experimental.macros
 
 object ops {
 
-  /**
-    * Returns the name of a field.
+  /** Returns the name of a field.
     *
     * Uses a macro to rewrite the statement:
     * {{{
@@ -18,8 +17,7 @@ object ops {
     */
   def nameFrom[A <: Product](name: A => Any): String = macro TypedOpsImpl.name
 
-  /**
-    * Returns a sequence of field names.
+  /** Returns a sequence of field names.
     *
     * Uses a macro to rewrite the statement:
     * {{{
@@ -29,8 +27,7 @@ object ops {
     */
   def namesFrom[A <: Product](names: A => Any*): Seq[String] = macro TypedOpsImpl.names
 
-  /**
-    * Returns a [[Column]] based on the given field.
+  /** Returns a [[Column]] based on the given field.
     *
     * Uses a macro to rewrite the statement:
     * {{{
@@ -38,12 +35,12 @@ object ops {
     *   col("name")
     * }}}
     *
-    * @see [[org.apache.spark.sql.functions.col]] for full Spark usage.
+    * @see
+    *   [[org.apache.spark.sql.functions.col]] for full Spark usage.
     */
   def colFrom[A <: Product](col: A => Any): Column = macro TypedOpsImpl.column
 
-  /**
-    * Returns a sequence of [[Column]]s based on the given fields.
+  /** Returns a sequence of [[Column]]s based on the given fields.
     *
     * Uses a macro to rewrite the statement:
     * {{{
@@ -51,12 +48,12 @@ object ops {
     *   Seq(col("id"), col("name"))
     * }}}
     *
-    * @see [[org.apache.spark.sql.functions.col]] for full Spark usage.
+    * @see
+    *   [[org.apache.spark.sql.functions.col]] for full Spark usage.
     */
   def colsFrom[A <: Product](cols: A => Any*): Seq[Column] = macro TypedOpsImpl.columns
 
-  /**
-    * Returns a [[Column]] based on the given field.
+  /** Returns a [[Column]] based on the given field.
     *
     * Uses a macro to rewrite the statement:
     * {{{
@@ -64,9 +61,20 @@ object ops {
     *   col("name")
     * }}}
     *
-    * @see [[org.apache.spark.sql.functions.col]] for full Spark usage.
+    * @see
+    *   [[org.apache.spark.sql.functions.col]] for full Spark usage.
     */
   def $[A <: Product](col: A => Any): Column = macro TypedOpsImpl.column
+
+  /** Returns a [[Column]] based on the `from` field renamed based on the `to` field.
+    *
+    * Uses a macro to rewrite the statement:
+    * {{{
+    *   renameFrom[Input, Output](_.start_date, _.startDate)
+    *   col("start_date").as("startDate")
+    * }}}
+    */
+  def renameFrom[A <: Product, B <: Product](from: A => Any, to: B => Any): Column = macro TypedOpsImpl.rename
 
   sealed trait typedColFrom[A <: Product] {
     def apply[B](col: A => B): TypedColumn[A, B] = macro TypedOpsImpl.typedColumn[A, B]
@@ -74,8 +82,7 @@ object ops {
 
   object typedColFrom {
 
-    /**
-      * Returns a [[TypedColumn]] based on the given field.
+    /** Returns a [[TypedColumn]] based on the given field.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -83,18 +90,17 @@ object ops {
       *   col("name").as[String]
       * }}}
       *
-      * @see [[org.apache.spark.sql.functions.col]] and [[org.apache.spark.sql.Column.as]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.functions.col]] and [[org.apache.spark.sql.Column.as]] for full Spark usage.
       */
     def apply[A <: Product]: typedColFrom[A] = new typedColFrom[A] {}
   }
 
-  /**
-    * Type-safe extension methods for [[Dataset]]s.
+  /** Type-safe extension methods for [[Dataset]]s.
     */
-  implicit class DatasetOps[A <: Product](val ds: Dataset[A]) extends AnyVal with Serializable {
+  implicit final class DatasetOps[A <: Product](val ds: Dataset[A]) extends AnyVal {
 
-    /**
-      * Get the name of a Dataset field.
+    /** Get the name of a Dataset field.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -104,8 +110,7 @@ object ops {
       */
     def nameFrom(name: A => Any): String = macro TypedOpsImpl.name
 
-    /**
-      * Get the names of Dataset fields.
+    /** Get the names of Dataset fields.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -115,8 +120,7 @@ object ops {
       */
     def namesFrom(names: A => Any*): Seq[String] = macro TypedOpsImpl.names
 
-    /**
-      * Select a column based on the field and return it as a [[Column]].
+    /** Select a column based on the field and return it as a [[Column]].
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -124,12 +128,12 @@ object ops {
       *   ds.col("name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.col]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.col]] for full Spark usage.
       */
     def colFrom(col: A => Any): Column = macro TypedOpsImpl.datasetColumn
 
-    /**
-      * Select columns based on the fields and return them as a sequence of [[Column]]s.
+    /** Select columns based on the fields and return them as a sequence of [[Column]]s.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -137,12 +141,35 @@ object ops {
       *   Seq(ds.col("id"), ds.col("name"))
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.col]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.col]] for full Spark usage.
       */
     def colsFrom(cols: A => Any*): Seq[Column] = macro TypedOpsImpl.datasetColumns
 
-    /**
-      * Dataset `cube` method with type-safe column access.
+    /** Select a column based on the field and return it as a [[TypedColumn]].
+      *
+      * Uses a macro to rewrite the statement:
+      * {{{
+      *   ds.typedColFrom(_.name)
+      *   ds.col("name").as[String]
+      * }}}
+      *
+      * @see
+      *   [[org.apache.spark.sql.functions.col]] and [[org.apache.spark.sql.Column.as]] for full Spark usage.
+      */
+    def typedColFrom[B](col: A => B): TypedColumn[A, B] = macro TypedOpsImpl.datasetTypedColumn[A, B]
+
+    /** Returns a [[Column]] based on the `from` field renamed based on the `to` field.
+      *
+      * Uses a macro to rewrite the statement:
+      * {{{
+      *   ds.renameFrom[Output](_.start_date, _.startDate)
+      *   ds("start_date").as("startDate")
+      * }}}
+      */
+    def renameFrom[B <: Product](from: A => Any, to: B => Any): Column = macro TypedOpsImpl.datasetRenameColumn
+
+    /** Dataset `cube` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -150,12 +177,12 @@ object ops {
       *   ds.cube("id", "name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.cube]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.cube]] for full Spark usage.
       */
     def cubeFrom(cols: A => Any*): RelationalGroupedDataset = macro TypedOpsImpl.datasetCube
 
-    /**
-      * Dataset `describe` method with type-safe column access.
+    /** Dataset `describe` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -163,12 +190,12 @@ object ops {
       *   ds.describe("id", "name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.describe]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.describe]] for full Spark usage.
       */
     def describeFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetDescribe
 
-    /**
-      * Dataset `drop` method with type-safe column access.
+    /** Dataset `drop` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -176,12 +203,12 @@ object ops {
       *   ds.drop("id", "name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.drop]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.drop]] for full Spark usage.
       */
     def dropFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetDrop
 
-    /**
-      * Dataset `dropDuplicates` method with type-safe column access.
+    /** Dataset `dropDuplicates` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -189,12 +216,12 @@ object ops {
       *   ds.dropDuplicates("id", "name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.dropDuplicates]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.dropDuplicates]] for full Spark usage.
       */
     def dropDuplicatesFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetDropDuplicates[A]
 
-    /**
-      * Dataset `groupBy` method with type-safe column access.
+    /** Dataset `groupBy` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -202,12 +229,12 @@ object ops {
       *   ds.groupBy("id", "name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.groupBy]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.groupBy]] for full Spark usage.
       */
     def groupByFrom(cols: A => Any*): RelationalGroupedDataset = macro TypedOpsImpl.datasetGroupBy
 
-    /**
-      * Dataset `rollup` method with type-safe column access.
+    /** Dataset `rollup` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -215,12 +242,12 @@ object ops {
       *   ds.rollup("id", "name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.rollup]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.rollup]] for full Spark usage.
       */
     def rollupFrom(cols: A => Any*): RelationalGroupedDataset = macro TypedOpsImpl.datasetRollup
 
-    /**
-      * Dataset `withColumnRenamed` method with type-safe column access.
+    /** Dataset `withColumnRenamed` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -228,13 +255,13 @@ object ops {
       *   ds.withColumnRenamed("id", "recordId")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.withColumnRenamed]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.withColumnRenamed]] for full Spark usage.
       */
     def withColumnRenamedFrom(existingName: A => Any, newName: String): DataFrame =
       macro TypedOpsImpl.datasetWithColumnRenamed
 
-    /**
-      * Dataset `orderBy` method with type-safe column access.
+    /** Dataset `orderBy` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -242,12 +269,12 @@ object ops {
       *   ds.orderBy("id", "name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.orderBy]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.orderBy]] for full Spark usage.
       */
     def orderByFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetOrderBy[A]
 
-    /**
-      * Dataset `select` method with type-safe column access.
+    /** Dataset `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -255,12 +282,12 @@ object ops {
       *   ds.select(ds.col("id"), ds.col("name"))
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
       */
     def selectFrom(cols: A => Any*): DataFrame = macro TypedOpsImpl.datasetSelect
 
-    /**
-      * Dataset `sort` method with type-safe column access.
+    /** Dataset `sort` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -268,12 +295,12 @@ object ops {
       *   ds.sort("id", "name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.sort]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.sort]] for full Spark usage.
       */
     def sortFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetSort[A]
 
-    /**
-      * Dataset `sortWithinPartitions` method with type-safe column access.
+    /** Dataset `sortWithinPartitions` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -281,12 +308,12 @@ object ops {
       *   ds.sortWithinPartitions("id", "name")
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.sortWithinPartitions]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.sortWithinPartitions]] for full Spark usage.
       */
     def sortWithinPartitionsFrom(cols: A => Any*): Dataset[A] = macro TypedOpsImpl.datasetSortWithinPartitions[A]
 
-    /**
-      * Dataset typed `select` method with type-safe column access.
+    /** Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -294,13 +321,13 @@ object ops {
       *   ds.select(ds.col("id").as[Int], ds.col("name").as[String])
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
       */
     def selectFromTyped[B1](c1: A => B1): Dataset[B1] =
       macro TypedOpsImpl.datasetSelectTyped1[B1]
 
-    /**
-      * Dataset typed `select` method with type-safe column access.
+    /** Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -308,13 +335,13 @@ object ops {
       *   ds.select(ds.col("id").as[Int], ds.col("name").as[String])
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
       */
     def selectFromTyped[B1, B2](c1: A => B1, c2: A => B2): Dataset[(B1, B2)] =
       macro TypedOpsImpl.datasetSelectTyped2[B1, B2]
 
-    /**
-      * Dataset typed `select` method with type-safe column access.
+    /** Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -322,13 +349,13 @@ object ops {
       *   ds.select(ds.col("id").as[Int], ds.col("name").as[String])
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
       */
     def selectFromTyped[B1, B2, B3](c1: A => B1, c2: A => B2, c3: A => B3): Dataset[(B1, B2, B3)] =
       macro TypedOpsImpl.datasetSelectTyped3[B1, B2, B3]
 
-    /**
-      * Dataset typed `select` method with type-safe column access.
+    /** Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -336,7 +363,8 @@ object ops {
       *   ds.select(ds.col("id").as[Int], ds.col("name").as[String])
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
       */
     def selectFromTyped[B1, B2, B3, B4](
         c1: A => B1,
@@ -346,8 +374,7 @@ object ops {
     ): Dataset[(B1, B2, B3, B4)] =
       macro TypedOpsImpl.datasetSelectTyped4[B1, B2, B3, B4]
 
-    /**
-      * Dataset typed `select` method with type-safe column access.
+    /** Dataset typed `select` method with type-safe column access.
       *
       * Uses a macro to rewrite the statement:
       * {{{
@@ -355,7 +382,8 @@ object ops {
       *   ds.select(ds.col("id").as[Int], ds.col("name").as[String])
       * }}}
       *
-      * @see [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
+      * @see
+      *   [[org.apache.spark.sql.Dataset.select]] for full Spark usage.
       */
     def selectFromTyped[B1, B2, B3, B4, B5](
         c1: A => B1,
@@ -366,11 +394,9 @@ object ops {
     ): Dataset[(B1, B2, B3, B4, B5)] =
       macro TypedOpsImpl.datasetSelectTyped5[B1, B2, B3, B4, B5]
 
-    /**
-      * Project the Dataset record type to another case class.
+    /** Project the Dataset record type to another case class.
       *
-      * The target case class must have a subset of the columns with the same names and types in any order. These
-      * conditions are verified at compile time.
+      * The target case class must have a subset of the columns with the same names and types in any order. These conditions are verified at compile time.
       */
     def project[B <: Product](implicit p: Projection[A, B]): Dataset[B] = p.apply(ds)
 

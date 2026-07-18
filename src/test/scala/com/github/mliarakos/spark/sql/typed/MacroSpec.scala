@@ -1,13 +1,14 @@
 package com.github.mliarakos.spark.sql.typed
 
-import com.github.mliarakos.spark.sql.typed.MacroTestFixtures._
+import com.github.mliarakos.spark.sql.typed.MacroTestData._
 import com.holdenkarau.spark.testing.DatasetSuiteBase
 import org.apache.spark.sql.functions.col
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.collection.immutable._
 
-class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSuiteBase with MacroTestFixtures {
+class MacroSpec extends AnyFlatSpec with Matchers with SparkMatchers with DatasetSuiteBase with MacroTestFixtures with MacroTestData {
 
   import ops._
   import spark.implicits._
@@ -22,13 +23,11 @@ class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSu
   }
 
   it should "get a name from a dataset" in {
-    val people = peopleData.toDS()
     people.nameFrom(_.id) shouldBe "id"
     people.nameFrom(_.address.street) shouldBe "address.street"
   }
 
   it should "get names from a dataset" in {
-    val people = peopleData.toDS()
     people.namesFrom(_.id, _.address.street) shouldBe Seq("id", "address.street")
   }
 
@@ -48,81 +47,77 @@ class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSu
     $[Person](_.address.street) shouldEqual $"address.street"
   }
 
+  it should "rename a column" in {
+    renameFrom[Input, Output](_.start_date, _.startDate) shouldEqual col("start_date").as("startDate")
+  }
+
   it should "create a column from a dataset" in {
-    val people = peopleData.toDS()
     people.colFrom(_.id) shouldEqual people("id")
     people.colFrom(_.address.street) shouldEqual people("address.street")
   }
 
   it should "create columns from a dataset" in {
-    val people  = peopleData.toDS()
     val columns = people.colsFrom(_.id, _.address.street)
     (columns should contain).theSameElementsInOrderAs(Seq(people("id"), people("address.street")))
   }
 
+  it should "rename a column on a dataset using a type" in {
+    val inputs = inputData.toDS()
+    inputs.renameFrom[Output](_.start_date, _.startDate) shouldEqual inputs("start_date").as("startDate")
+  }
+
   it should "cube columns on a dataset" in {
-    val people = peopleData.toDS()
-    val df     = people.cubeFrom(_.id, _.address.street).count()
+    val df = people.cubeFrom(_.id, _.address.street).count()
     validate(df, people.cube("id", "address.street").count())
   }
 
   it should "describe columns on a dataset" in {
-    val people = peopleData.toDS()
-    val df     = people.describeFrom(_.id, _.address.street)
+    val df = people.describeFrom(_.id, _.address.street)
     validate(df, people.describe("id", "address.street"))
   }
 
   it should "drop columns on a dataset" in {
-    val people = peopleData.toDS()
-    val df     = people.dropFrom(_.id, _.address.street)
+    val df = people.dropFrom(_.id, _.address.street)
     validate(df, people.drop("id", "address.street"))
   }
 
   it should "drop duplicate columns on a dataset" in {
-    val people = peopleData.toDS()
-    val ds     = people.dropDuplicatesFrom(_.id, _.address)
+    val ds = people.dropDuplicatesFrom(_.id, _.address)
     validate(ds, people.dropDuplicates("id", "address"))
   }
 
   it should "group columns on a dataset" in {
-    val people = peopleData.toDS()
-    val df     = people.groupByFrom(_.id, _.address.street).count()
+    val df = people.groupByFrom(_.id, _.address.street).count()
     validate(df, people.groupBy("id", "address.street").count())
   }
 
   it should "order columns on a dataset" in {
-    val people = peopleData.toDS()
-    val ds     = people.orderByFrom(_.id, _.address.street)
+    val ds = people.orderByFrom(_.id, _.address.street)
     validate(ds, people.orderBy("id", "address.street"))
   }
 
   it should "rollup columns on a dataset" in {
-    val people = peopleData.toDS()
-    val df     = people.rollupFrom(_.id, _.address.street).count()
+    val df = people.rollupFrom(_.id, _.address.street).count()
     validate(df, people.rollup("id", "address.street").count())
   }
 
   it should "select columns on a dataset" in {
-    val people = peopleData.toDS()
-    val df     = people.selectFrom(_.id, _.address.street)
+    val df = people.selectFrom(_.id, _.address.street)
     validate(df, people.select(people("id"), people("address.street")))
   }
 
   it should "sort columns on a dataset" in {
-    val people = peopleData.toDS()
-    val ds     = people.sortFrom(_.id, _.address.street)
+    val ds = people.sortFrom(_.id, _.address.street)
     validate(ds, people.sort("id", "address.street"))
   }
 
   it should "sort partitions on a dataset" in {
-    val people = peopleData.toDS()
-    val ds     = people.sortWithinPartitionsFrom(_.id, _.address.street)
+    val ds = people.sortWithinPartitionsFrom(_.id, _.address.street)
     validate(ds, people.sortWithinPartitions("id", "address.street"))
   }
 
   it should "rename a column on a dataset" in {
-    val people = peopleData.toDS()
-    val df     = people.withColumnRenamedFrom(_.id, "recordId")
+    val df = people.withColumnRenamedFrom(_.id, "recordId")
     validate(df, people.withColumnRenamed("id", "recordId"))
   }
 
@@ -132,9 +127,13 @@ class MacroSpec extends FlatSpec with Matchers with SparkMatchers with DatasetSu
     typedColFrom[Person](_.address.street) shouldEqual col("address.street").as[String]
   }
 
-  it should "select typed columns on a dataset" in {
-    val people = peopleData.toDS()
+  it should "get typed columns on a dataset" in {
+    people.typedColFrom(_.id) shouldEqual people("id").as[String]
+    people.typedColFrom(_.name) shouldEqual people("name").as[String]
+    people.typedColFrom(_.age) shouldEqual people("age").as[Int]
+  }
 
+  it should "select typed columns on a dataset" in {
     val id      = people("id").as[String]
     val name    = people("name").as[String]
     val age     = people("age").as[Int]
